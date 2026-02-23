@@ -7,7 +7,6 @@ body:
       value: |
         Please provide a minimal reproducible example if possible, ideally using one of the
         [CellRank datasets](https://cellrank.readthedocs.io/en/stable/api/datasets.html).
-        Include exact steps to reproduce the bug in a clean Python environment.
 
   - type: textarea
     id: report
