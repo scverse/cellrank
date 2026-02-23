@@ -618,6 +618,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             tsi_df.sort_values(by="number_of_macrostates", inplace=True)
             tsi_df["identified_terminal_states"] = tsi_df["identified_terminal_states"].ffill()
             tsi_df.sort_values(by="number_of_macrostates", ascending=False, inplace=True)
+            tsi_df.index = tsi_df.index.astype(str)
             tsi_df = AnnData(tsi_df, uns={"terminal_states": terminal_states, "cluster_key": cluster_key})
             self._tsi = tsi_df
 
