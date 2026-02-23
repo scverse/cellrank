@@ -1,0 +1,32 @@
+name: Bug report
+description: Report something that is broken or incorrect
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please provide a minimal reproducible example if possible, ideally using one of the
+        [CellRank datasets](https://cellrank.readthedocs.io/en/stable/api/datasets.html).
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Version information
+      description: |
+        Please paste the output of `cellrank.logging.print_versions()` below.
+
+        ```python
+        import cellrank
+        cellrank.logging.print_versions()
+        ```
+      render: text
+    validations:
+      required: true
