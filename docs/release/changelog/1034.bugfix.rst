@@ -1,1 +1,0 @@
-Fix ``adjustText`` modifying data in-place.

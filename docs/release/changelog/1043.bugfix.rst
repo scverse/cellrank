@@ -1,1 +1,0 @@
-Fix lineage color map in :func:`cellrank.pl.gene_trends`.
