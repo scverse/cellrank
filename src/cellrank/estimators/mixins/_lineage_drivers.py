@@ -495,7 +495,6 @@ class LinDriversMixin(FateProbsMixin):
                 start = logg.info("Adjusting text position")
                 adjustText.adjust_text(
                     annots,
-                    # https://github.com/theislab/cellrank/issues/1033
                     x=np.array(adata.varm[dkey][key1], copy=True),
                     y=np.array(adata.varm[dkey][key2], copy=True),
                     ax=ax,
