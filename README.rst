@@ -43,7 +43,7 @@ CellRank's key applications
     :target: https://discourse.scverse.org/c/ecosystem/cellrank/
     :alt: Discourse
 
-.. |CI| image:: https://img.shields.io/github/actions/workflow/status/theislab/cellrank/test.yml?branch=main
+.. |CI| image:: https://img.shields.io/github/actions/workflow/status/theislab/cellrank/test.yaml?branch=main
     :target: https://github.com/theislab/cellrank/actions
     :alt: CI
 
