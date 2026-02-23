@@ -10,12 +10,6 @@ import pandas as pd
 import pytest
 import scipy.sparse as sp
 import scvelo as scv
-from _helpers import (
-    create_failed_model,
-    create_model,
-    gamr_skip,
-    resize_images_to_same_sizes,
-)
 from anndata import AnnData
 from matplotlib.testing import setup
 from matplotlib.testing.compare import compare_images
@@ -26,6 +20,12 @@ from cellrank._utils._key import Key
 from cellrank.estimators import CFLARE, GPCCA
 from cellrank.kernels import ConnectivityKernel, PseudotimeKernel, VelocityKernel
 from cellrank.models import GAMR
+from tests._helpers import (
+    create_failed_model,
+    create_model,
+    gamr_skip,
+    resize_images_to_same_sizes,
+)
 
 setup()
 
