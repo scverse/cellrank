@@ -788,18 +788,16 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
 
         if not hide_cells:
             cbar = cbar and (typp == ColorType.CONT)
+            scatter_kwargs: dict[str, Any] = {"s": size, "alpha": alpha}
             if typp == ColorType.CONT:
                 vmin, vmax = _minmax(color, perc)
+                scatter_kwargs.update(cmap=fate_prob_cmap, vmin=vmin, vmax=vmax)
 
             _ = ax.scatter(
                 self.x_all.squeeze(),
                 scaler(self.y_all.squeeze()),
                 c=color,
-                s=size,
-                cmap=fate_prob_cmap,
-                vmin=vmin,
-                vmax=vmax,
-                alpha=alpha,
+                **scatter_kwargs,
             )
 
         if title is None:

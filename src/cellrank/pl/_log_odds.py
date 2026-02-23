@@ -261,6 +261,12 @@ def log_odds(
         else:
             legend = kwargs.get("legend", "auto")
 
+        if palette is None:
+            palette = "dark:black"
+        elif isinstance(palette, list):
+            n_levels = df[hue].nunique()
+            palette = palette[:n_levels]
+
         ax = sns.stripplot(
             x=time_key,
             y="log_odds",
@@ -268,7 +274,6 @@ def log_odds(
             hue=hue,
             order=order,
             jitter=jitter,
-            color="black",
             palette=palette,
             size=size,
             alpha=alpha if alpha is not None else None if thresh_mask is None else 0.8,
@@ -277,6 +282,7 @@ def log_odds(
             **kwargs,
         )
         if thresh_mask is not None:
+            thresh_palette = f"dark:{threshold_color}" if isinstance(palette, str) else palette
             sns.stripplot(
                 x=time_key,
                 y="log_odds",
@@ -284,8 +290,7 @@ def log_odds(
                 hue=hue,
                 order=order,
                 jitter=jitter,
-                color=threshold_color,
-                palette=palette,
+                palette=thresh_palette,
                 size=size * 2,
                 alpha=0.9,
                 ax=ax,
