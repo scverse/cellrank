@@ -43,19 +43,19 @@ classifiers = [
 ]
 dynamic = [ "version" ]
 dependencies = [
-  "anndata>=0.10",
+  "anndata>=0.11",
   "docrep>=0.3",
-  "joblib>=1.3",
-  "matplotlib>=3.8",
-  "networkx>=3.2",
-  "numba>=0.59",
-  "numpy>=1.26",
-  "pandas>=2.1",
+  "joblib>=1.4",
+  "matplotlib>=3.9",
+  "networkx>=3.4",
+  "numba>=0.60",
+  "numpy>=2",
+  "pandas>=2.2",
   "pygam>=0.10",
   "pygpcca>=1.0.4",
-  "scanpy>=1.10",
+  "scanpy>=1.11",
   "scikit-learn>=1.6",
-  "scipy>=1.12",
+  "scipy>=1.14",
   "scvelo>=0.3",
   "seaborn>=0.13",
   "wrapt>=1.16",
@@ -78,26 +78,26 @@ dev = [
 ]
 test = [
   "coverage[toml]>=7",
-  "igraph",
+  "igraph>=1",
   "jax",
-  "leidenalg",
-  "pillow",
+  "leidenalg>=0.11",
+  "pillow>=10",
   "pytest>=8",
-  "pytest-cov>=4",
-  "pytest-mock>=3.5",
+  "pytest-cov>=6",
+  "pytest-mock>=3.14",
   "pytest-xdist",
   "zarr<3",
 ]
 docs = [
-  "furo>=2022.9.29",
-  "myst-nb>=0.17.1",
-  "sphinx>=5.1.1",
-  "sphinx-autodoc-typehints>=1.10.3",
+  "furo>=2024.8.6",
+  "myst-nb>=1.2",
+  "sphinx>=7.4",
+  "sphinx-autodoc-typehints>=2.5",
   "sphinx-copybutton>=0.5",
-  "sphinx-design>=0.3",
-  "sphinx-tippy>=0.4.1",
-  "sphinxcontrib-bibtex>=2.3",
-  "sphinxcontrib-spelling>=7.6.2",
+  "sphinx-design>=0.6",
+  "sphinx-tippy>=0.4.3",
+  "sphinxcontrib-bibtex>=2.6",
+  "sphinxcontrib-spelling>=8",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -239,3 +239,7 @@ ignore_roles = [
   "doc",
   "cite",
 ]
+
+[tool.uv]
+# pygpcca 1.0.4 incorrectly pins jinja2==3.0.3; override until next release
+override-dependencies = [ "jinja2>=3.1" ]
