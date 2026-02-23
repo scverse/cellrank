@@ -244,6 +244,9 @@ def cluster_trends(
         clustering_kwargs = dict(clustering_kwargs)
         clustering_kwargs["key_added"] = "clusters"
         clustering_kwargs.setdefault("random_state", random_state)
+        clustering_kwargs.setdefault("flavor", "igraph")
+        clustering_kwargs.setdefault("n_iterations", 2)
+        clustering_kwargs.setdefault("directed", False)
         sc.tl.leiden(trends, **clustering_kwargs)
 
         logg.info(f"Saving data to `adata.uns[{key!r}]`")
