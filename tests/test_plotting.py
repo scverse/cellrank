@@ -2970,6 +2970,7 @@ class TestPlotDriverCorrelation:
 
     @compare(kind="gpcca")
     def test_driver_corr_adjust_text(self, mc: GPCCA, fpath: str):
+        pytest.importorskip("adjustText")
         mc.plot_lineage_drivers_correlation(
             "0",
             "1",
