@@ -10,12 +10,6 @@ import pandas as pd
 import pytest
 import scanpy as sc
 import scipy.sparse as sp
-from _helpers import (
-    bias_knn,
-    create_kernels,
-    jax_not_installed_skip,
-    random_transition_matrix,
-)
 from anndata import AnnData, read_h5ad
 from pandas.core.dtypes.common import is_bool_dtype, is_integer_dtype
 from scanpy import Neighbors
@@ -42,6 +36,12 @@ from cellrank.kernels._base_kernel import (
 from cellrank.kernels._cytotrace_kernel import CytoTRACEAggregation
 from cellrank.kernels.mixins._kernel import ConnectivityMixin
 from cellrank.kernels.utils._velocity_model import VelocityModel
+from tests._helpers import (
+    bias_knn,
+    create_kernels,
+    jax_not_installed_skip,
+    random_transition_matrix,
+)
 
 _rtol = 1e-6
 

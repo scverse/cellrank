@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 import scanpy as sc
 import scipy.sparse as sp
-from _helpers import assert_array_nan_equal, create_model, jax_not_installed_skip
 from anndata import AnnData
 from anndata.utils import make_index_unique
 
@@ -41,6 +40,7 @@ from cellrank.pl._utils import (
     _create_models,
     _default_model_callback,
 )
+from tests._helpers import assert_array_nan_equal, create_model, jax_not_installed_skip
 
 
 class TestToolsUtils:

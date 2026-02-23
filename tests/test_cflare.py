@@ -3,13 +3,13 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
-from _helpers import assert_estimators_equal
 from anndata import AnnData
 
 import cellrank as cr
 from cellrank._utils._key import Key
 from cellrank.estimators.mixins._utils import StatesHolder
 from cellrank.kernels import ConnectivityKernel, VelocityKernel
+from tests._helpers import assert_estimators_equal
 
 EPS = np.finfo(np.float64).eps
 

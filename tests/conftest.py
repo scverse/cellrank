@@ -5,7 +5,6 @@ import matplotlib
 import numpy as np
 import pytest
 import scanpy as sc
-from _helpers import create_model
 from anndata import AnnData
 from numba.core.errors import NumbaPerformanceWarning
 
@@ -13,6 +12,7 @@ import cellrank as cr
 from cellrank.estimators import CFLARE, GPCCA
 from cellrank.kernels import ConnectivityKernel, VelocityKernel
 from cellrank.models import GAM, GAMR, SKLearnModel
+from tests._helpers import create_model
 
 _adata_small = sc.read("tests/_ground_truth_adatas/adata_50.h5ad")
 _adata_medium = sc.read("tests/_ground_truth_adatas/adata_100.h5ad")

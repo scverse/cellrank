@@ -196,6 +196,7 @@ lint.pydocstyle.convention = "numpy"
 [tool.pytest.ini_options]
 testpaths = "tests"
 xfail_strict = true
+addopts = [ "--import-mode=importlib" ]
 
 [tool.coverage.run]
 branch = true

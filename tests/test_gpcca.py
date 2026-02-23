@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse as sp
-from _helpers import assert_array_nan_equal, assert_estimators_equal
 from anndata import AnnData
 from pandas.testing import assert_frame_equal, assert_series_equal
 
@@ -16,6 +15,7 @@ import cellrank as cr
 from cellrank._utils import Lineage
 from cellrank._utils._key import Key
 from cellrank.kernels import ConnectivityKernel, VelocityKernel
+from tests._helpers import assert_array_nan_equal, assert_estimators_equal
 
 
 # fmt: off

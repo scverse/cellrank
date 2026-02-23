@@ -7,7 +7,6 @@ import pickle
 import numpy as np
 import pytest
 import scipy.stats as st
-from _helpers import assert_models_equal, create_model, gamr_skip
 from anndata import AnnData
 from pygam import ExpectileGAM
 from sklearn.svm import SVR
@@ -25,6 +24,7 @@ from cellrank.models._utils import (
     _get_offset,
     _rankdata,
 )
+from tests._helpers import assert_models_equal, create_model, gamr_skip
 
 
 class TestModel:
