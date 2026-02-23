@@ -1,12 +1,13 @@
 import abc
+import logging
 from typing import Any
 
 import numpy as np
 import scipy.sparse as sp
 
-from cellrank import logging as logg
 from cellrank._utils._utils import _connected, _get_neighs, _symmetric
 
+logger = logging.getLogger(__name__)
 __all__ = ["ConnectivityMixin", "UnidirectionalMixin", "BidirectionalMixin"]
 
 
@@ -26,9 +27,9 @@ class ConnectivityMixin:
         self._conn = sp.csr_matrix(conn).astype(np.float64, copy=False)
 
         if check_connectivity and not _connected(self.connectivities):
-            logg.warning("kNN graph is not connected")
+            logger.warning("kNN graph is not connected")
         if check_symmetric and not _symmetric(self.connectivities):
-            logg.warning("kNN graph is not symmetric")
+            logger.warning("kNN graph is not symmetric")
 
     def _density_normalize(self, matrix: np.ndarray | sp.spmatrix) -> np.ndarray | sp.spmatrix:
         """
@@ -43,7 +44,7 @@ class ConnectivityMixin:
         -------
         Density normalized matrix.
         """
-        logg.debug("Density normalizing the transition matrix")
+        logger.debug("Density normalizing the transition matrix")
 
         q = np.asarray(self.connectivities.sum(axis=0)).squeeze()
         Q = sp.spdiags(1.0 / q, 0, matrix.shape[0], matrix.shape[0])

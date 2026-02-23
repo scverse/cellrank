@@ -1,5 +1,6 @@
 import collections
 import enum
+import logging
 import math
 import pathlib
 import types
@@ -17,7 +18,6 @@ from matplotlib import cm, colors
 from scanpy.plotting import violin
 from scvelo.plotting import paga
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
@@ -30,6 +30,7 @@ from cellrank._utils._utils import (
 )
 from cellrank.pl._utils import _position_legend
 
+logger = logging.getLogger(__name__)
 __all__ = ["aggregate_fate_probabilities"]
 
 
@@ -425,7 +426,7 @@ def aggregate_fate_probabilities(
                 clusters = [clusters]
             clusters = _unique_order_preserving(clusters)
             if mode in (mode.PAGA, mode.PAGA_PIE):
-                logg.debug(f"Setting `clusters` to all available ones because of `mode={mode!r}`")
+                logger.debug("Setting `clusters` to all available ones because of `mode=%r`", mode)
                 clusters = list(adata.obs[cluster_key].cat.categories)
             else:
                 for cname in clusters:
@@ -458,7 +459,7 @@ def aggregate_fate_probabilities(
         std = np.nanstd(data, axis=0) / np.sqrt(data.shape[0])
         d[name] = [mean, std]
 
-    logg.debug(f"Plotting in mode `{mode!r}`")
+    logger.debug("Plotting in mode %r", mode)
     use_clustermap = False
     if mode == mode.CLUSTERMAP:
         use_clustermap = True

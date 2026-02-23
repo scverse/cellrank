@@ -1,4 +1,5 @@
 import abc
+import logging
 import types
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -11,7 +12,6 @@ from anndata import AnnData
 from matplotlib.colors import to_hex
 from pandas.api.types import infer_dtype
 
-from cellrank import logging as logg
 from cellrank._utils._colors import (
     _convert_to_hex_colors,
     _create_categorical_colors,
@@ -31,11 +31,12 @@ from cellrank.estimators.mixins._utils import (
     PlotMode,
     SafeGetter,
     StatesHolder,
-    logger,
+    log_writer,
     shadow,
 )
 from cellrank.kernels._base_kernel import KernelExpression
 
+logger = logging.getLogger(__name__)
 __all__ = ["TermStatesEstimator"]
 
 
@@ -363,7 +364,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             raise RuntimeError(f"Compute {name} first.")
 
         if not discrete and obj.memberships is None:
-            logg.warning(f"Unable to plot {name} in continuous mode, using discrete")
+            logger.warning("Unable to plot %s in continuous mode, using discrete", name)
             discrete = True
 
         data = obj.assignment if discrete else obj.memberships
@@ -490,7 +491,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         _data = _data[states].copy()
 
         if mode == "time" and same_plot:
-            logg.warning("Invalid combination `mode='time'` and `same_plot=True`. Using `same_plot=False`")
+            logger.warning("Invalid combination `mode='time'` and `same_plot=True`. Using `same_plot=False`")
             same_plot = False
 
         _data_X = _data.X  # list(_data.T) behaves differently than a numpy.array
@@ -534,7 +535,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             if same_plot:
                 if color:
                     # https://github.com/theislab/scvelo/issues/673
-                    logg.warning("Ignoring `color` when `mode='embedding'` and `same_plot=True`")
+                    logger.warning("Ignoring `color` when `mode='embedding'` and `same_plot=True`")
                 title = [_title] if title is None else title
                 kwargs["color_gradients"] = _data
             else:
@@ -615,7 +616,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         return categories, colors
         # fmt: on
 
-    @logger
+    @log_writer
     @shadow
     def _write_states(
         self,

@@ -1,5 +1,7 @@
 import contextlib
+import logging
 import pathlib
+import time as _time
 import types
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
@@ -14,7 +16,6 @@ from matplotlib import patheffects, rc_context
 from matplotlib.axes import Axes
 from matplotlib.patches import ArrowStyle
 
-from cellrank import logging as logg
 from cellrank._utils._colors import _create_categorical_colors
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._import_utils import _check_module_importable
@@ -22,8 +23,9 @@ from cellrank._utils._key import Key
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import RandomKeys, TestMethod, _correlation_test, save_fig
 from cellrank.estimators.mixins._fate_probabilities import FateProbsMixin
-from cellrank.estimators.mixins._utils import BaseProtocol, SafeGetter, logger, shadow
+from cellrank.estimators.mixins._utils import BaseProtocol, SafeGetter, log_writer, shadow
 
+logger = logging.getLogger(__name__)
 __all__ = ["LinDriversMixin"]
 
 
@@ -115,7 +117,7 @@ class LinDriversMixin(FateProbsMixin):
             raise RuntimeError("Compute `.fate_probabilities` first as `.compute_fate_probabilities()`.")
 
         if fate_probs.shape[1] == 1:
-            logg.warning("There is only 1 lineage present. Using stationary distribution instead")
+            logger.warning("There is only 1 lineage present. Using stationary distribution instead")
             stat_dist = self.eigendecomposition.get("stationary_dist", None)
             if stat_dist is None:
                 raise RuntimeError("No stationary distribution found in `.eigendecomposition['stationary_dist']`.")
@@ -161,7 +163,7 @@ class LinDriversMixin(FateProbsMixin):
         # check that the layer exists, and that use raw is only used with layer X
         if layer in (None, "X"):
             if use_raw and self.adata.raw is None:
-                logg.warning("No raw attribute set. Using `.X` instead")
+                logger.warning("No raw attribute set. Using `.X` instead")
                 use_raw = False
             data = adata_comp.raw.X if use_raw else adata_comp.X
             var_names = adata_comp.raw.var_names if use_raw else adata_comp.var_names
@@ -169,14 +171,18 @@ class LinDriversMixin(FateProbsMixin):
             if layer not in self.adata.layers:
                 raise KeyError(f"Layer `{layer!r}` not found in `adata.layers`.")
             if use_raw:
-                logg.warning("If `use_raw=True`, layer must be `None`.")
+                logger.warning("If `use_raw=True`, layer must be `None`.")
                 use_raw = False
             data = adata_comp.layers[layer]
             var_names = adata_comp.var_names
 
-        start = logg.debug(
-            f"Computing correlations for lineages `{sorted(lineages)}` restricted to clusters `{clusters}` in "
-            f"layer `{'X' if layer is None else layer}` with `use_raw={use_raw}`"
+        _start = _time.perf_counter()
+        logger.debug(
+            "Computing correlations for lineages %r restricted to clusters %r in layer %r with use_raw=%s",
+            sorted(lineages),
+            clusters,
+            "X" if layer is None else layer,
+            use_raw,
         )
 
         lin_probs = lin_probs[lineages]
@@ -191,7 +197,7 @@ class LinDriversMixin(FateProbsMixin):
             **kwargs,
         )
         params = self._create_params()
-        self._write_lineage_drivers(drivers.loc[var_names], use_raw=use_raw, params=params, time=start)
+        self._write_lineage_drivers(drivers.loc[var_names], use_raw=use_raw, params=params, time=_start)
 
         return drivers
 
@@ -373,7 +379,7 @@ class LinDriversMixin(FateProbsMixin):
         from cellrank.pl._utils import _position_legend  # circular import
 
         if use_raw and self.adata.raw is None:
-            logg.warning("No raw attribute set. Setting `use_raw=False`")
+            logger.warning("No raw attribute set. Setting `use_raw=False`")
             use_raw = False
         adata = self.adata.raw if use_raw else self.adata
         dkey = Key.varm.lineage_drivers(self.backward)
@@ -447,7 +453,7 @@ class LinDriversMixin(FateProbsMixin):
                     gene_sets_colors = self.fate_probabilities[sets].colors
                     # fmt: on
                 except KeyError:
-                    logg.warning("Unable to determine gene sets colors from lineages. Using default colors")
+                    logger.warning("Unable to determine gene sets colors from lineages. Using default colors")
                     gene_sets_colors = _create_categorical_colors(len(gene_sets))
             if len(gene_sets_colors) != len(gene_sets):
                 raise ValueError(
@@ -492,14 +498,15 @@ class LinDriversMixin(FateProbsMixin):
                 _check_module_importable("adjustText", extra="plot")
                 import adjustText
 
-                start = logg.info("Adjusting text position")
+                _start = _time.perf_counter()
+                logger.info("Adjusting text position")
                 adjustText.adjust_text(
                     annots,
                     x=np.array(adata.varm[dkey][key1], copy=True),
                     y=np.array(adata.varm[dkey][key2], copy=True),
                     ax=ax,
                 )
-                logg.info("    Finish", time=start)
+                logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
             if len(annots) and legend_loc not in (None, "none"):
                 _position_legend(ax, legend_loc=legend_loc)
 
@@ -509,7 +516,7 @@ class LinDriversMixin(FateProbsMixin):
         if not show:
             return ax
 
-    @logger
+    @log_writer
     @shadow
     def _write_fate_probabilities(
         self: LinDriversProtocol,
@@ -522,7 +529,7 @@ class LinDriversMixin(FateProbsMixin):
 
         return super()._write_fate_probabilities(fate_probs, params=params, log=False)
 
-    @logger
+    @log_writer
     @shadow
     def _write_lineage_drivers(
         self: LinDriversProtocol,

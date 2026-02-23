@@ -1,11 +1,12 @@
 import enum
+import logging
+import time as _time
 from collections.abc import Callable
 from typing import Any, Literal
 
 import numpy as np
 from anndata import AnnData
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t, ModeEnum
 from cellrank._utils._utils import _connected, _irreducible
@@ -18,6 +19,7 @@ from cellrank.kernels.utils._pseudotime_scheme import (
     ThresholdSchemeABC,
 )
 
+logger = logging.getLogger(__name__)
 __all__ = ["PseudotimeKernel"]
 
 
@@ -126,7 +128,8 @@ class PseudotimeKernel(ConnectivityMixin, BidirectionalKernel):
         if self.pseudotime is None:
             raise ValueError("Compute pseudotime first.")  # CytoTraceKernel
 
-        start = logg.info("Computing transition matrix based on pseudotime")
+        _start = _time.perf_counter()
+        logger.info("Computing transition matrix based on pseudotime")
         if isinstance(threshold_scheme, str):
             threshold_scheme = ThresholdScheme(threshold_scheme)
             if threshold_scheme == ThresholdScheme.SOFT:
@@ -148,7 +151,7 @@ class PseudotimeKernel(ConnectivityMixin, BidirectionalKernel):
             )
 
         # fmt: off
-        if self._reuse_cache({"dnorm": False, "scheme": str(threshold_scheme), **kwargs}, time=start):
+        if self._reuse_cache({"dnorm": False, "scheme": str(threshold_scheme), **kwargs}):
             return self
         # fmt: on
 
@@ -163,12 +166,12 @@ class PseudotimeKernel(ConnectivityMixin, BidirectionalKernel):
 
         # make sure the biased graph is still connected
         if not _connected(biased_conn):
-            logg.warning("Biased k-NN graph is disconnected")
+            logger.warning("Biased k-NN graph is disconnected")
         if check_irreducibility and not _irreducible(biased_conn):
-            logg.warning("Biased k-NN graph is not irreducible")
+            logger.warning("Biased k-NN graph is not irreducible")
 
         self.transition_matrix = biased_conn
-        logg.info("    Finish", time=start)
+        logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
 
         return self
 

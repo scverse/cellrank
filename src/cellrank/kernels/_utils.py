@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -9,9 +10,10 @@ from anndata import AnnData
 from numba import prange
 from pandas.api.types import infer_dtype
 
-from cellrank import logging as logg
-
 jit_kwargs = {"nogil": True, "fastmath": True}
+
+
+logger = logging.getLogger(__name__)
 
 
 @nb.njit(parallel=False, **jit_kwargs)
@@ -138,7 +140,7 @@ def _ensure_numeric_ordered(adata: AnnData, key: str) -> pd.Series:
             ) from e
 
     if not isinstance(exp_time.dtype, pd.CategoricalDtype):
-        logg.debug(f"Converting `adata.obs[{key!r}]` to `categorical`")
+        logger.debug("Converting `adata.obs[%r]` to `categorical`", key)
         exp_time = np.asarray(exp_time)
         categories = sorted(set(exp_time[~np.isnan(exp_time)]))
         if len(categories) > 100:  # arbitrary threshold
@@ -155,7 +157,7 @@ def _ensure_numeric_ordered(adata: AnnData, key: str) -> pd.Series:
         )
 
     if not exp_time.cat.ordered:
-        logg.warning("Categories are not ordered. Using ascending order")
+        logger.warning("Categories are not ordered. Using ascending order")
         exp_time.cat = exp_time.cat.as_ordered()
 
     exp_time = pd.Series(pd.Categorical(exp_time, ordered=True), index=adata.obs_names)

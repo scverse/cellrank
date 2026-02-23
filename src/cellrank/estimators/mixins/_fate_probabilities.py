@@ -1,3 +1,5 @@
+import logging
+import time as _time
 import types
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, NamedTuple
@@ -8,7 +10,6 @@ import scipy.sparse as sp
 from anndata import AnnData
 from pandas.api.types import infer_dtype
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
 from cellrank._utils._key import Key
@@ -25,10 +26,11 @@ from cellrank.estimators.mixins._utils import (
     PlotMode,
     SafeGetter,
     StatesHolder,
-    logger,
+    log_writer,
     shadow,
 )
 
+logger = logging.getLogger(__name__)
 __all__ = ["FateProbsMixin"]
 
 
@@ -204,7 +206,8 @@ class FateProbsMixin:
 
         - :attr:`fate_probabilities` - %(fate_probs.summary)s
         """
-        start = logg.info("Computing fate probabilities")
+        _start = _time.perf_counter()
+        logger.info("Computing fate probabilities")
         data = self._rec_trans_states(keys, ctx="fate_probs")
         fate_probs = self._compute_fate_probabilities(
             data.q,
@@ -230,7 +233,7 @@ class FateProbsMixin:
         self._write_fate_probabilities(
             fate_probs,
             params=params,
-            time=start,
+            time=_start,
         )
 
     @d.dedent
@@ -318,7 +321,8 @@ class FateProbsMixin:
 
         - :attr:`absorption_times` - %(abs_times.summary)s
         """
-        start = logg.info("Computing absorption times")
+        _start = _time.perf_counter()
+        logger.info("Computing absorption times")
         if show_progress_bar is None:
             # prevent from displaying too many progress bars
             show_progress_bar = not calculate_variance
@@ -344,7 +348,7 @@ class FateProbsMixin:
         self._write_absorption_times(
             abs_times,
             params=params,
-            time=start,
+            time=_start,
         )
 
     @d.dedent
@@ -404,14 +408,14 @@ class FateProbsMixin:
 
         # get the transition matrix
         if not sp.issparse(self.transition_matrix):
-            logg.warning("Attempting to solve a potentially large linear system with dense transition matrix")
+            logger.warning("Attempting to solve a potentially large linear system with dense transition matrix")
 
         # process the current annotations according to `keys`
         term_states, colors = _process_series(series=self.terminal_states, keys=keys, cols=self._term_states.colors)
         # warn in case only one state is left
         keys = list(term_states.cat.categories)
         if ctx == "fate_probs" and len(keys) == 1:
-            logg.warning("There is only `1` terminal state, all cells will have probability `1` of going there")
+            logger.warning("There is only `1` terminal state, all cells will have probability `1` of going there")
 
         # get indices corresponding to recurrent and transient states
         rec_indices, trans_indices, name_to_ixs = _get_cat_and_null_indices(term_states)
@@ -494,7 +498,7 @@ class FateProbsMixin:
 
         return abs_classes
 
-    @logger
+    @log_writer
     @shadow
     def _write_fate_probabilities(
         self: FateProbsProtocol,
@@ -510,7 +514,7 @@ class FateProbsMixin:
 
         return f"Adding `adata.obsm[{key!r}]`\n       `.fate_probabilities`\n    Finish"
 
-    @logger
+    @log_writer
     @shadow
     def _write_absorption_times(
         self: FateProbsProtocol,
@@ -523,7 +527,7 @@ class FateProbsMixin:
 
         return f"Adding `adata.obsm[{key!r}]`\n       `.absorption_times`\n    Finish"
 
-    @logger
+    @log_writer
     @shadow
     def _write_lineage_priming(self: FateProbsProtocol, priming_degree: pd.Series | None) -> str:
         self._priming_degree = priming_degree

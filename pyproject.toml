@@ -53,11 +53,13 @@ dependencies = [
   "pandas>=2.2",
   "pygam>=0.10",
   "pygpcca>=1.0.4",
+  "rich>=13",
   "scanpy>=1.11",
   "scikit-learn>=1.6",
   "scipy>=1.14",
   "scvelo>=0.3",
   "seaborn>=0.13",
+  "session-info2>=0.2",
   "wrapt>=1.16",
 ]
 

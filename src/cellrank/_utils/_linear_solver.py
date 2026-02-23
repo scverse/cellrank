@@ -1,14 +1,15 @@
 import functools
+import logging
 from typing import TypeVar
 
 import numpy as np
 import scipy.sparse as sp
 from scipy.linalg import solve
 
-from cellrank import logging as logg
 from cellrank._utils._enum import DEFAULT_BACKEND
 from cellrank._utils._parallelize import _get_n_cores, parallelize
 
+logger = logging.getLogger(__name__)
 __all__ = ["_solve_lin_system", "_is_petsc_slepc_available"]
 
 _DEFAULT_SOLVER = "gmres"
@@ -269,10 +270,11 @@ def _petsc_direct_solve(
 
             res, converged = _solve_many_sparse_problems_petsc(mat_b, mat_a=mat_a, tol=tol, **kwargs)
             if not converged:
-                logg.warning(
-                    f"The solution for system "
-                    f"`A{list(mat_a.shape)} * x[{mat_b.shape[0]}] = b[{mat_b.shape[0]}]` "
-                    f"did not converge"
+                logger.warning(
+                    "The solution for system A%s * x[%s] = b[%s] did not converge",
+                    list(mat_a.shape),
+                    mat_b.shape[0],
+                    mat_b.shape[0],
                 )
 
             return res[:, None]
@@ -311,10 +313,11 @@ def _petsc_direct_solve(
     converged = ksp.is_converged if hasattr(ksp, "is_converged") else ksp.converged
 
     if not converged:
-        logg.debug(
-            f"The solution for system "
-            f"`A{list(A.getSize())} * X{list(x.getSize())} = B{list(B.getSize())}` "
-            f"did not converge"
+        logger.debug(
+            "The solution for system `A%s * X%s = B%s` did not converge",
+            list(A.getSize()),
+            list(x.getSize()),
+            list(B.getSize()),
         )
 
     return res
@@ -390,7 +393,7 @@ def _solve_lin_system(
         global _PETSC_ERROR_MSG_SHOWN
         if not _PETSC_ERROR_MSG_SHOWN:
             _PETSC_ERROR_MSG_SHOWN = True
-            logg.warning(_PETSC_ERROR_MSG.format(_DEFAULT_SOLVER))
+            logger.warning(_PETSC_ERROR_MSG.format(_DEFAULT_SOLVER))
         solver = _DEFAULT_SOLVER
         use_petsc = False
 
@@ -399,17 +402,17 @@ def _solve_lin_system(
 
     if solver == "direct":
         if use_petsc:
-            logg.debug("Solving the linear system directly using `PETSc`")
+            logger.debug("Solving the linear system directly using `PETSc`")
             return _petsc_direct_solve(mat_a, mat_b, solver=solver, preconditioner=preconditioner, tol=tol)
 
         if sp.issparse(mat_a):
-            logg.debug("Densifying `A` for `scipy` direct solver")
+            logger.debug("Densifying `A` for `scipy` direct solver")
             mat_a = mat_a.toarray()
         if sp.issparse(mat_b):
-            logg.debug("Densifying `B` for `scipy` direct solver")
+            logger.debug("Densifying `B` for `scipy` direct solver")
             mat_b = mat_b.toarray()
 
-        logg.debug("Solving the linear system directly using `scipy`")
+        logger.debug("Solving the linear system directly using `scipy`")
 
         return solve(mat_a, mat_b)
 
@@ -423,10 +426,12 @@ def _solve_lin_system(
 
         # as_array causes an issue, because it's called like this np.array([(NxM), (NxK), ....]
         # in the end, we want array of shape Nx(M + K + ...) - this is ensured by the extractor
-        logg.debug(
-            f"Solving the linear system using `PETSc` solver `{('gmres' if solver is None else solver)!r}` "
-            f"on `{n_jobs}` core(s) with {'no' if preconditioner is None else preconditioner} preconditioner and "
-            f"`tol={tol}`"
+        logger.debug(
+            "Solving the linear system using `PETSc` solver `%r` on `%s` core(s) with %s preconditioner and `tol=%s`",
+            "gmres" if solver is None else solver,
+            n_jobs,
+            "no" if preconditioner is None else preconditioner,
+            tol,
         )
 
         mat_x, n_converged = parallelize(
@@ -440,16 +445,19 @@ def _solve_lin_system(
         )(mat_a, solver=solver, preconditioner=preconditioner, tol=tol)
     elif solver in _AVAIL_ITER_SOLVERS:
         if not sp.issparse(mat_a):
-            logg.debug("Sparsifying `A` for iterative solver")
+            logger.debug("Sparsifying `A` for iterative solver")
             mat_a = sp.csr_matrix(mat_a)
 
         mat_b = mat_b.T
         if not sp.issparse(mat_b):
-            logg.debug("Sparsifying `B` for iterative solver")
+            logger.debug("Sparsifying `B` for iterative solver")
             mat_b = sp.csr_matrix(mat_b)
 
-        logg.debug(
-            f"Solving the linear system using `scipy` solver `{solver!r}` on `{n_jobs} cores(s)` with `tol={tol}`"
+        logger.debug(
+            "Solving the linear system using `scipy` solver `%r` on `%s cores(s)` with `tol=%s`",
+            solver,
+            n_jobs,
+            tol,
         )
 
         mat_x, n_converged = parallelize(
@@ -466,7 +474,7 @@ def _solve_lin_system(
         raise ValueError(f"Invalid solver `{solver!r}`.")
 
     if n_converged != mat_b.shape[0]:
-        logg.warning(f"`{mat_b.shape[0] - n_converged}` solution(s) did not converge")
+        logger.warning("`%s` solution(s) did not converge", mat_b.shape[0] - n_converged)
 
     return mat_x
 

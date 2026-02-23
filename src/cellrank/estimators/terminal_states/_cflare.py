@@ -1,3 +1,5 @@
+import logging
+import time as _time
 import warnings
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -7,7 +9,6 @@ import pandas as pd
 import scipy.stats as st
 from anndata import AnnData
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._utils import (
     _cluster_X,
@@ -21,6 +22,7 @@ from cellrank.estimators.terminal_states._term_states_estimator import (
 )
 from cellrank.kernels._utils import _get_basis
 
+logger = logging.getLogger(__name__)
 __all__ = ["CFLARE"]
 
 
@@ -179,7 +181,8 @@ class CFLARE(TermStatesEstimator, LinDriversMixin, EigenMixin):
             raise RuntimeError("Compute eigendecomposition first as `.compute_eigendecomposition()`.")
         use = convert_use(use)
 
-        start = logg.info("Computing terminal states")
+        _start = _time.perf_counter()
+        logger.info("Computing terminal states")
         # we check for complex values only in the left, that's okay because the complex pattern
         # will be identical for left and right
         V_l, V_r = eig["V_l"][:, use], eig["V_r"].real[:, use]
@@ -194,7 +197,7 @@ class CFLARE(TermStatesEstimator, LinDriversMixin, EigenMixin):
 
         # filter out cells which are in the lowest q percentile in abs value in each eigenvector
         if percentile is not None:
-            logg.debug("Filtering out cells according to percentile")
+            logger.debug("Filtering out cells according to percentile")
             if not (0 <= percentile <= 100):
                 raise ValueError(f"Expected `percentile` to be in interval `[0, 100]`, found `{percentile}`.")
             cutoffs = np.percentile(np.abs(V_l), percentile, axis=0)
@@ -216,7 +219,7 @@ class CFLARE(TermStatesEstimator, LinDriversMixin, EigenMixin):
                 )
 
         # fmt: off
-        logg.debug(f"Using `{use}` eigenvectors, basis `{basis!r}` and method `{method!r}` for clustering")
+        logger.debug("Using `%s` eigenvectors, basis %r and method %r for clustering", use, basis, method)
         clusters = _cluster_X(
             X,
             method=method,
@@ -236,7 +239,7 @@ class CFLARE(TermStatesEstimator, LinDriversMixin, EigenMixin):
 
         # filtering to get rid of some of the leftover transient states
         if n_matches_min > 0:
-            logg.debug(f"Filtering according to `n_matches_min={n_matches_min}`")
+            logger.debug("Filtering according to `n_matches_min=%s`", n_matches_min)
             distances = _get_connectivities(self.adata, mode="distances", n_neighbors=n_neighbors_filtering)
             labels = _filter_cells(distances, rc_labels=labels, n_matches_min=n_matches_min)
         # fmt: on
@@ -246,7 +249,7 @@ class CFLARE(TermStatesEstimator, LinDriversMixin, EigenMixin):
             cluster_key=cluster_key,
             probs=self._compute_term_states_probs(eig, use),
             params=self._create_params(),
-            time=start,
+            time=_start,
         )
 
     def _compute_term_states_probs(self, eig: dict[str, Any], use: list[int]) -> pd.Series:

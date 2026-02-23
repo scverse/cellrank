@@ -2,7 +2,9 @@ import contextlib
 import functools
 import inspect
 import itertools
+import logging
 import os
+import time as _time
 import types
 import warnings
 from collections.abc import Callable, Hashable, Iterable, Sequence
@@ -22,7 +24,6 @@ from pandas.api.types import infer_dtype
 from sklearn.cluster import KMeans
 from statsmodels.stats.multitest import multipletests
 
-from cellrank import logging as logg
 from cellrank._utils._colors import (
     _compute_mean_color,
     _convert_to_hex_colors,
@@ -39,6 +40,9 @@ CFLARE = TypeVar("CFLARE")
 DiGraph = TypeVar("DiGraph")
 
 EPS = np.finfo(np.float64).eps
+
+
+logger = logging.getLogger(__name__)
 
 
 class TestMethod(ModeEnum):
@@ -269,9 +273,10 @@ def _complex_warning(X: np.ndarray, use: list | int | tuple | range, use_imag: b
     complex_ixs = np.array(use)[np.where(complex_mask)[0]]
     complex_key = "imaginary" if use_imag else "real"
     if len(complex_ixs) > 0:
-        logg.warning(
-            f"The eigenvectors with indices `{list(complex_ixs)}` have an imaginary part. "
-            f"Showing their {complex_key} part"
+        logger.warning(
+            "The eigenvectors with indices `%s` have an imaginary part. Showing their %s part",
+            list(complex_ixs),
+            complex_key,
         )
     X_ = X.real
     if use_imag:
@@ -400,10 +405,11 @@ def _correlation_test(
     )
     invalid = (corr < -1) | (corr > 1)
     if np.any(invalid):
-        logg.warning(
-            f"Found `{np.sum(invalid)}` correlation(s) that are not in `[0, 1]`. "
-            f"This usually happens when gene expression is constant across all cells. "
-            f"Setting to `NaN`"
+        logger.warning(
+            "Found `%s` correlation(s) that are not in `[0, 1]`. "
+            "This usually happens when gene expression is constant across all cells. "
+            "Setting to `NaN`",
+            np.sum(invalid),
         )
         corr[invalid] = np.nan
         pvals[invalid] = np.nan
@@ -538,7 +544,7 @@ def _filter_cells(distances: sp.spmatrix, rc_labels: pd.Series, n_matches_min: i
     freqs_new = np.array([np.sum(rc_labels == cl) for cl in cls])
 
     if np.any((freqs_new / freqs_orig) < 0.5):
-        logg.warning(
+        logger.warning(
             "Consider lowering  'n_matches_min' or increasing 'n_neighbors_filtering'. This filters out too many cells"
         )
 
@@ -636,7 +642,8 @@ def _partition[DiGraph](
     -------
     Recurrent and transient classes, respectively.
     """
-    start = logg.debug("Partitioning the graph into current and transient classes")
+    _start = _time.perf_counter()
+    logger.debug("Partitioning the graph into current and transient classes")
 
     def partition(g):
         yield from (
@@ -657,7 +664,7 @@ def _partition[DiGraph](
     rec_classes = (node for node, is_rec in rec_classes if is_rec)
     trans_classes = (node for node, is_rec in trans_classes if not is_rec)
 
-    logg.debug("    Finish", time=start)
+    logger.debug("    Finish (%.2fs)", _time.perf_counter() - _start)
 
     return maybe_sort(rec_classes), maybe_sort(trans_classes)
 
@@ -825,7 +832,7 @@ def save_fig(fig, path: str | os.PathLike, make_dir: bool = True, ext: str = "pn
     if make_dir:
         _maybe_create_dir(os.path.split(path)[0])
 
-    logg.debug(f"Saving figure to `{path!r}`")
+    logger.debug("Saving figure to %r", path)
 
     fig.savefig(path, bbox_inches="tight", transparent=True)
 
@@ -850,7 +857,7 @@ def _convert_to_categorical_series(
     mapper, expected_size = {}, 0
     for ts, cells in term_states.items():
         if not len(cells):
-            logg.warning(f"No cells selected for category `{ts!r}`. Skipping")
+            logger.warning("No cells selected for category %r. Skipping", ts)
             continue
         cells = [c if isinstance(c, str) else cell_names[c] for c in cells]
         rest = set(cells) - cnames
@@ -1056,7 +1063,7 @@ def _fuzzy_to_discrete(
 
     # initialise
     n_raise = 1 if raise_threshold is None else np.max([int(raise_threshold * n_most_likely), 1])
-    logg.debug(f"Raising an exception if there are less than `{n_raise}` cells.")
+    logger.debug("Raising an exception if there are less than `%s` cells.", n_raise)
 
     # initially select `n_most_likely` samples per cluster
     sample_assignment = {
@@ -1124,7 +1131,7 @@ def _series_from_one_hot_matrix(
     if not np.all(membership.sum(axis=1) <= 1):
         raise ValueError("Not all items are one-hot encoded or empty.")
     if (membership.sum(0) == 0).any():
-        logg.warning(f"Detected {np.sum(membership.sum(0) == 0)} empty categories")
+        logger.warning("Detected %s empty categories", np.sum(membership.sum(0) == 0))
 
     if index is None:
         index = range(n_samples)
@@ -1214,7 +1221,7 @@ def _calculate_absorption_time_moments(
     n_jobs = kwargs.pop("n_jobs", None)
     solve_kwargs = _filter_kwargs(_solve_lin_system, **kwargs)
 
-    logg.debug("Calculating mean time to absorption to any absorbing state")
+    logger.debug("Calculating mean time to absorption to any absorbing state")
     m = _solve_lin_system(
         Q,
         np.ones((Q.shape[0],), dtype=np.float32),
@@ -1227,17 +1234,17 @@ def _calculate_absorption_time_moments(
     mean[trans_indices] = m
 
     if calculate_variance:
-        logg.debug("Calculating variance of mean time to absorption to any absorbing state")
+        logger.debug("Calculating variance of mean time to absorption to any absorbing state")
 
         I = sp.eye(Q.shape[0]) if sp.issparse(Q) else np.eye(Q.shape[0])
         A_t = (I + Q).T
         B_t = (I - Q).T
 
-        logg.debug("Solving equation (1/2)")
+        logger.debug("Solving equation (1/2)")
         X = _solve_lin_system(A_t, B_t, n_jobs=n_jobs, **kwargs).T
         y = m - X @ (m**2)
 
-        logg.debug("Solving equation (2/2)")
+        logger.debug("Solving equation (2/2)")
         v = _solve_lin_system(X, y, use_eye=False, n_jobs=1, **solve_kwargs).squeeze()
         assert np.all(v >= 0), f"Encountered negative variance: `{v[v < 0]}`."
 
@@ -1302,7 +1309,7 @@ def _calculate_lineage_absorption_time_means(
     I = sp.eye(Q.shape[0]) if sp.issparse(Q) else np.eye(Q.shape)
     N_inv = I - Q
 
-    logg.debug("Solving equation for `B`")
+    logger.debug("Solving equation for `B`")
     B = _solve_lin_system(Q, R, use_eye=True, **kwargs)
 
     no_jobs_kwargs = kwargs.copy()
@@ -1314,7 +1321,7 @@ def _calculate_lineage_absorption_time_means(
         D_j_inv.data = 1.0 / D_j.data
 
         # fmt: off
-        logg.debug(f"Calculating mean time to absorption to `{lineage!r}`")
+        logger.debug("Calculating mean time to absorption to %r", lineage)
         m = _solve_lin_system(D_j_inv @ N_inv @ D_j, np.ones(Q.shape[0]), **kwargs).squeeze()
         # fmt: on
 
@@ -1325,7 +1332,7 @@ def _calculate_lineage_absorption_time_means(
 
         if calculate_variance:
             # fmt: off
-            logg.debug(f"Calculating variance of the mean time to absorption to `{lineage!r}`")
+            logger.debug("Calculating variance of the mean time to absorption to %r", lineage)
 
             X = _solve_lin_system(D_j + Q @ D_j, N_inv @ D_j, use_eye=False, **kwargs)
             y = m - X @ (m**2)
@@ -1371,7 +1378,7 @@ def _check_collection(
     adata_name = "adata"
 
     if use_raw and adata.raw is None:
-        logg.warning("Argument `use_raw` was set to `True`, but no `raw` attribute is found. Ignoring")
+        logger.warning("Argument `use_raw` was set to `True`, but no `raw` attribute is found. Ignoring")
         use_raw = False
     if use_raw:
         adata_name = "adata.raw"

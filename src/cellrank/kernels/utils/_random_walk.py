@@ -1,5 +1,7 @@
 import itertools
+import logging
 import pathlib
+import time as _time
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
@@ -14,12 +16,12 @@ from matplotlib.colors import LinearSegmentedColormap, to_hex
 from pandas.api.types import infer_dtype
 from scvelo.plotting.utils import default_size, plot_outline
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._parallelize import parallelize
 from cellrank._utils._utils import save_fig
 from cellrank.kernels._utils import _get_basis
 
+logger = logging.getLogger(__name__)
 __all__ = ["RandomWalk"]
 
 Indices_t = Sequence[str] | Mapping[str, str | Sequence[str] | tuple[float, float]] | None
@@ -165,7 +167,8 @@ class RandomWalk:
         if n_sims <= 0:
             raise ValueError(f"Expected number of simulations to be positive, found `{n_sims}`.")
         max_iter = self._max_iter(max_iter)
-        start = logg.info(f"Simulating `{n_sims}` random walks of maximum length `{max_iter}`")
+        _start = _time.perf_counter()
+        logger.info("Simulating %d random walks of maximum length %d", n_sims, max_iter)
 
         simss = parallelize(
             self._simulate_many,
@@ -178,7 +181,7 @@ class RandomWalk:
         )(max_iter=max_iter, seed=seed, successive_hits=successive_hits)
         simss = list(itertools.chain.from_iterable(simss))
 
-        logg.info("    Finish", time=start)
+        logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
 
         return simss
 
@@ -235,7 +238,7 @@ class RandomWalk:
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
         scv.pl.scatter(self._adata, basis=basis, show=False, ax=ax, **kwargs)
 
-        logg.info("Plotting random walks")
+        logger.info("Plotting random walks")
         for sim in sims:
             x = emb[sim][:, 0]
             y = emb[sim][:, 1]

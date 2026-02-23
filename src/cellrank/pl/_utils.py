@@ -1,7 +1,9 @@
 import collections
 import copy
 import itertools
+import logging
 import pathlib
+import time as _time
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, NamedTuple, TypeVar
 
@@ -15,7 +17,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas.api.types import infer_dtype
 from sklearn.svm import SVR
 
-from cellrank import logging as logg
 from cellrank._utils._colors import _create_categorical_colors
 from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND
@@ -24,6 +25,7 @@ from cellrank._utils._utils import _unique_order_preserving, save_fig
 from cellrank.models import GAMR, BaseModel, FailedModel, SKLearnModel
 from cellrank.models._base_model import ColorType
 
+logger = logging.getLogger(__name__)
 __all__ = ["composition"]
 
 Queue = TypeVar("Queue")
@@ -296,7 +298,8 @@ def _fit_bulk(
 
     n_jobs = parallel_kwargs.pop("n_jobs", 1)
 
-    start = logg.info(f"Computing trends using `{n_jobs}` core(s)")
+    _start = _time.perf_counter()
+    logger.info("Computing trends using %d core(s)", n_jobs)
     models = parallelize(
         _fit_bulk_helper,
         genes,
@@ -311,7 +314,7 @@ def _fit_bulk(
         return_models=return_models,
         **kwargs,
     )
-    logg.info("    Finish", time=start)
+    logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
 
     return _filter_models(models, return_models=return_models, filter_all_failed=filter_all_failed)
 
@@ -353,12 +356,12 @@ def _filter_models(
 
     if not np.all(modelmask.values):
         failed_models = modelmat.values[~modelmask.values]
-        logg.warning(
+        logger.warning(
             f"Unable to fit `{len(failed_models)}` models." + ""
             if return_models
             else "Consider specify `return_models=True` for further inspection."
         )
-        logg.debug("The failed models were:\n`{}`".format("\n".join(f"    {m}" for m in failed_models)))
+        logger.debug("The failed models were:\n`{}`".format("\n".join(f"    {m}" for m in failed_models)))
 
     # lineages is the max number of lineages
     return models, filtered_models, tuple(filtered_models.keys()), tuple(to_keep.index)
@@ -748,7 +751,7 @@ def _create_callbacks(
         if not perform_sanity_check:
             return
 
-        logg.debug("Performing callback sanity checks")
+        logger.debug("Performing callback sanity checks")
         for gene in callbacks:
             for lineage, cb in callbacks[gene].items():
                 # create the model here because the callback can search the attribute

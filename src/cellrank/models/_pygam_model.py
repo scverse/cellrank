@@ -1,6 +1,7 @@
 import collections
 import copy
 import enum
+import logging
 import types
 import warnings
 from collections.abc import Mapping
@@ -19,12 +20,12 @@ from pygam import (
     s,
 )
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._utils import _filter_kwargs
 from cellrank.models import BaseModel
 
+logger = logging.getLogger(__name__)
 __all__ = ["GAM"]
 
 
@@ -116,9 +117,11 @@ class GAM(BaseModel):
             if not (0 < expectile < 1):
                 raise ValueError(f"Expected `expectile` to be in `(0, 1)`, found `{expectile}`.")
             if distribution != "normal" or link != "identity":
-                logg.warning(
-                    f"Expectile GAM works only with `normal` distribution and `identity` link function, "
-                    f"found `{distribution!r}` distribution and {link!r} link functions."
+                logger.warning(
+                    "Expectile GAM works only with `normal` distribution and `identity` link function, "
+                    "found `%r` distribution and %r link functions.",
+                    distribution,
+                    link,
                 )
             model = ExpectileGAM(term, expectile=expectile, max_iter=max_iter, verbose=False, **kwargs)
         else:
@@ -194,7 +197,7 @@ class GAM(BaseModel):
                 except Exception as e:  # noqa: BLE001
                     # workaround for: https://github.com/dswah/pyGAM/issues/273
                     self.model.fit(self.x, self.y, weights=self.w, **kwargs)
-                    logg.error(f"Grid search failed, reason: `{e}`. Fitting with default values")
+                    logger.error("Grid search failed, reason: `%s`. Fitting with default values", e)
 
             try:
                 self.model.fit(self.x, self.y, weights=self.w, **kwargs)

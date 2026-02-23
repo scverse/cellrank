@@ -1,4 +1,6 @@
 import enum
+import logging
+import time as _time
 from typing import Any, Literal
 
 import numpy as np
@@ -8,7 +10,6 @@ import scipy.stats as st
 from anndata import AnnData
 from sklearn.utils.sparsefuncs import csc_median_axis_0
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
@@ -16,6 +17,7 @@ from cellrank._utils._key import Key
 from cellrank._utils._utils import _correlation_test
 from cellrank.kernels._pseudotime_kernel import PseudotimeKernel
 
+logger = logging.getLogger(__name__)
 __all__ = ["CytoTRACEKernel"]
 
 
@@ -161,7 +163,7 @@ class CytoTRACEKernel(PseudotimeKernel):
         aggregation = CytoTRACEAggregation(aggregation)
 
         if use_raw and self.adata.raw is None:
-            logg.warning("`adata.raw` is `None`. Setting `use_raw=False`")
+            logger.warning("`adata.raw` is `None`. Setting `use_raw=False`")
             use_raw = False
         if layer not in (None, "X") and layer not in self.adata.layers:
             raise KeyError(
@@ -173,12 +175,13 @@ class CytoTRACEKernel(PseudotimeKernel):
         msg = f"Computing CytoTRACE score with `{adata_mraw.n_vars}` genes"
         if adata_mraw.n_vars < 10000:
             msg += ". Consider using more than `10000` genes"
-        start = logg.info(msg)
+        _start = _time.perf_counter()
+        logger.info("%s", msg)
 
         # compute number of expressed genes per cell
         num_exp_genes = np.asarray((adata_mraw.X > 0).sum(axis=1)).squeeze()
 
-        logg.debug("Correlating all genes with number of genes expressed per cell")
+        logger.debug("Correlating all genes with number of genes expressed per cell")
         gene_corr = _correlation_test(
             adata_mraw.X,
             Lineage(num_exp_genes[:, None], names=["gene"]),
@@ -208,15 +211,21 @@ class CytoTRACEKernel(PseudotimeKernel):
             "n_genes": len(pos_top_genes),
         }
 
-        logg.info(
-            f"Adding `adata.obs[{Key.cytotrace('score')!r}]`\n"
-            f"       `adata.obs[{Key.cytotrace('pseudotime')!r}]`\n"
-            f"       `adata.obs[{Key.cytotrace('num_exp_genes')!r}]`\n"
-            f"       `adata.var[{Key.cytotrace('gene_corr')!r}]`\n"
-            f"       `adata.var[{Key.cytotrace('correlates')!r}]`\n"
-            f"       `adata.uns[{Key.cytotrace('params')!r}]`\n"
-            f"    Finish",
-            time=start,
+        logger.info(
+            "Adding `adata.obs[%r]`\n"
+            "       `adata.obs[%r]`\n"
+            "       `adata.obs[%r]`\n"
+            "       `adata.var[%r]`\n"
+            "       `adata.var[%r]`\n"
+            "       `adata.uns[%r]`\n"
+            "    Finish (%.2fs)",
+            Key.cytotrace("score"),
+            Key.cytotrace("pseudotime"),
+            Key.cytotrace("num_exp_genes"),
+            Key.cytotrace("gene_corr"),
+            Key.cytotrace("correlates"),
+            Key.cytotrace("params"),
+            _time.perf_counter() - _start,
         )
 
         return self
@@ -247,8 +256,11 @@ class CytoTRACEKernel(PseudotimeKernel):
             raise ValueError("No genes have been selected.")
 
         if len(top_genes) != n_genes:
-            logg.warning(
-                f"Unable to get requested top {modifier} correlated `{n_genes}`. Using top `{len(top_genes)}` genes"
+            logger.warning(
+                "Unable to get requested top %s correlated `%s`. Using top `%s` genes",
+                modifier,
+                n_genes,
+                len(top_genes),
             )
 
         # fmt: off

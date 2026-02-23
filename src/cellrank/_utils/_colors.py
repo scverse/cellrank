@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from typing import Any
 
@@ -8,7 +9,7 @@ from matplotlib import cm, colors
 from pandas.api.types import infer_dtype
 from scanpy.plotting.palettes import vega_20_scanpy
 
-from cellrank import logging as logg
+logger = logging.getLogger(__name__)
 
 
 def _create_colors(
@@ -206,7 +207,7 @@ def _map_names_and_colors(
         if not all(colors.is_color_like(c) for c in colors_reference):
             raise ValueError("Not all values are valid colors.")
         if len(set(colors_reference)) != len(colors_reference):
-            logg.warning("Color sequence contains non-unique elements")
+            logger.warning("Color sequence contains non-unique elements")
 
     # create dataframe to store the associations between reference and query
     cats_query = series_query.cat.categories
@@ -264,7 +265,7 @@ def _map_names_and_colors(
     if en_cutoff is not None:
         critical_cats = sorted(set(association_df.loc[association_df["entropy"] > en_cutoff, "name"].values))
         if len(critical_cats) > 0:
-            logg.warning(f"The following states could not be mapped uniquely: `{critical_cats}`")
+            logger.warning("The following states could not be mapped uniquely: `%s`", critical_cats)
 
     return (names_query_new, list(_convert_to_hex_colors(colors_query_new))) if process_colors else names_query_new
 

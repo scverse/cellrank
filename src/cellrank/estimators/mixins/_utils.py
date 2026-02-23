@@ -1,5 +1,6 @@
 import copy
 import enum
+import logging
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import (
     Any,
@@ -14,13 +15,13 @@ import pandas as pd
 from anndata import AnnData
 from wrapt import decorator
 
-from cellrank import logging as logg
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._lineage import Lineage
 
+logger = logging.getLogger(__name__)
 __all__ = [
     "BaseProtocol",
-    "logger",
+    "log_writer",
     "shadow",
     "SafeGetter",
     "StatesHolder",
@@ -87,13 +88,19 @@ class BaseProtocol(Protocol):  # noqa: D101
 
 
 @decorator()
-def logger(wrapped: Callable[..., str], instance: Any, args: Any, kwargs: dict[str, Any]) -> str:
+def log_writer(wrapped: Callable[..., str], instance: Any, args: Any, kwargs: dict[str, Any]) -> str:
     """Handle logging for :class:`~anndata.AnnData` writing functions of :class:`~cellrank.estimators.BaseEstimator`."""
-    log, time = kwargs.pop("log", True), kwargs.pop("time", None)
+    import time as _time
+
+    log = kwargs.pop("log", True)
+    t0 = kwargs.pop("time", None)
     msg = wrapped(*args, **kwargs)
 
     if log:
-        logg.info(msg, time=time)
+        if t0 is not None:
+            logger.info("%s (%.2fs)", msg, _time.perf_counter() - t0)
+        else:
+            logger.info(msg)
 
     return msg
 
@@ -110,7 +117,7 @@ def shadow(wrapped: Callable[..., str], instance: Any, args: Any, kwargs: Mappin
             # don't care what the "shadowed" function returns
             _ = wrapped(*args, **kwargs)
         except Exception as e:  # noqa: BLE001
-            logg.error(f"Unable to duplicate function call using shadow `anndata.AnnData` object. Reason: `{e}`")
+            logger.error("Unable to duplicate function call using shadow `anndata.AnnData` object. Reason: `%s`", e)
 
     return res
 
@@ -156,7 +163,7 @@ class SafeGetter:
         self._exc_type = exc_type
         # TODO(michalk8): log properly
         if not self.ok:
-            logg.debug(f"The estimator will not be completely initialized, reason: {exc_type(exc_val)}")
+            logger.debug("The estimator will not be completely initialized, reason: %s", exc_type(exc_val))
             self._obj.__dict__ = self._dict
             return self._exc_type in self._allowed
 

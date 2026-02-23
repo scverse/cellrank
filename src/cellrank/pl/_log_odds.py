@@ -1,4 +1,5 @@
 import copy
+import logging
 import pathlib
 from collections.abc import Iterable, Sequence
 from typing import Any
@@ -12,13 +13,13 @@ from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize, to_hex
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d
 from cellrank._utils._utils import _unique_order_preserving, save_fig
 from cellrank.kernels._utils import _ensure_numeric_ordered
 from cellrank.pl._utils import _get_categorical_colors, _position_legend
 
+logger = logging.getLogger(__name__)
 __all__ = ["log_odds"]
 
 
@@ -176,7 +177,7 @@ def log_odds(
     np.random.seed(seed)  # noqa: NPY002
     _ = kwargs.pop("orient", None)
     if use_raw and adata.raw is None:
-        logg.warning("No raw attribute set. Setting `use_raw=False`")
+        logger.warning("No raw attribute set. Setting `use_raw=False`")
         use_raw = False
 
     probs = Lineage.from_adata(adata, backward=backward)
