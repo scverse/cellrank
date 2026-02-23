@@ -52,13 +52,7 @@ def parallelize(
     The result depending on ``callable``, ``extractor`` and ``as_array``.
     """
     if show_progress_bar:
-        try:
-            from tqdm.auto import tqdm
-        except ImportError:
-            try:
-                from tqdm.std import tqdm
-            except ImportError:
-                tqdm = None
+        from tqdm.auto import tqdm
     else:
         tqdm = None
 

@@ -488,20 +488,20 @@ class LinDriversMixin(FateProbsMixin):
                     ax.scatter([], [], color=color, label=key)
 
             if adjust_text:
-                try:
-                    import adjustText
+                from cellrank._utils._import_utils import _check_module_importable
 
-                    start = logg.info("Adjusting text position")
-                    adjustText.adjust_text(
-                        annots,
-                        # https://github.com/theislab/cellrank/issues/1033
-                        x=np.array(adata.varm[dkey][key1], copy=True),
-                        y=np.array(adata.varm[dkey][key2], copy=True),
-                        ax=ax,
-                    )
-                    logg.info("    Finish", time=start)
-                except ImportError:
-                    logg.error("Please install `adjustText` first as `pip install adjustText`")
+                _check_module_importable("adjustText", extra="plot")
+                import adjustText
+
+                start = logg.info("Adjusting text position")
+                adjustText.adjust_text(
+                    annots,
+                    # https://github.com/theislab/cellrank/issues/1033
+                    x=np.array(adata.varm[dkey][key1], copy=True),
+                    y=np.array(adata.varm[dkey][key2], copy=True),
+                    ax=ax,
+                )
+                logg.info("    Finish", time=start)
             if len(annots) and legend_loc not in (None, "none"):
                 _position_legend(ax, legend_loc=legend_loc)
 

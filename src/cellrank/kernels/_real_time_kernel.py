@@ -253,6 +253,9 @@ class RealTimeKernel(UnidirectionalKernel):
             rtk = cr.kernels.RealTimeKernel.from_moscot(problem)
             rtk = rtk.compute_transition_matrix()
         """
+        from cellrank._utils._import_utils import _check_module_importable
+
+        _check_module_importable("moscot", extra="moscot")
         from moscot.utils.subset_policy import SequentialPolicy, TriangularPolicy
 
         if not problem.solutions:
