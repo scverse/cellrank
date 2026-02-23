@@ -58,8 +58,8 @@ please cite GPCCA {cite}`reuter:19` as:
 
 The original CellRank publication introduced a framework for directed single-cell fate mapping
 based on RNA velocity and gene expression similarity. It combines these signals via a Markov chain
-formulation and uses the GPCCA algorithm to identify initial and terminal states, compute fate
-probabilities, and infer driver genes.
+formulation, uses the GPCCA algorithm to identify initial and terminal states, and builds on
+Markov chain theory to compute fate probabilities and infer driver genes.
 
 Lange, M. *et al.* [CellRank for directed single-cell fate mapping.](https://doi.org/10.1038/s41592-021-01346-6) *Nat. Methods* **19**, 159–170 (2022).
 

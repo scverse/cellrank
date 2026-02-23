@@ -30,8 +30,10 @@ you can also use other tools such as `uv` or `pip`.
 In addition to the packages needed to _use_ CellRank,
 you need additional packages to [run tests](#writing-tests) and [build the documentation](#building-the-docs-locally).
 
-:::::{tabs}
-::::{group-tab} Hatch
+:::::{tab-set}
+::::{tab-item} Hatch
+:sync: hatch
+
 On the command line, you typically interact with hatch through its CLI.
 Running one of the following commands will automatically resolve the environments
 for testing and building the documentation in the background:
@@ -70,7 +72,9 @@ for `Python: Select Interpreter`. Choose `Enter Interpreter Path` and paste the
 path from above.
 ::::
 
-::::{group-tab} uv
+::::{tab-item} uv
+:sync: uv
+
 A popular choice for managing virtual environments is [uv].
 The main disadvantage compared to hatch is that it supports only a single
 environment per project at a time, which requires mixing dependencies for
@@ -85,7 +89,9 @@ uv sync --all-extras
 The `.venv` directory is typically automatically discovered by IDEs such as VS Code.
 ::::
 
-::::{group-tab} Pip
+::::{tab-item} Pip
+:sync: pip
+
 You can also manage environments manually using `pip`:
 
 ```bash
@@ -100,9 +106,9 @@ The `.venv` directory is typically automatically discovered by IDEs such as VS C
 
 [uv]: https://docs.astral.sh/uv/
 
-## Code style
+## Code-style
 
-This project uses [pre-commit] to enforce consistent code styles.
+This package uses [pre-commit] to enforce consistent code-styles.
 On every commit, pre-commit checks will either automatically fix issues
 with the code, or raise an error message.
 
@@ -125,6 +131,8 @@ git pull --rebase
 ```
 
 to integrate the changes into yours.
+While the [pre-commit.ci] is useful, we strongly encourage installing and running pre-commit
+locally first to understand its usage.
 
 We use [Ruff] for linting and formatting Python code,
 and [Biome] for JSON/JSONC formatting.
@@ -143,7 +151,7 @@ it for [Ruff][ruff-editors] and [Biome][biome-editors].
 ## Writing tests
 
 CellRank uses [pytest] for automated testing.
-Please write tests for every function added to the package.
+Please write {doc}`scanpy:dev/testing` for every function added to the package.
 
 Most IDEs integrate with pytest and provide a GUI to run tests.
 Point yours to one of the environments returned by
@@ -155,8 +163,9 @@ hatch env find hatch-test    # list environment paths
 
 Alternatively, you can run all tests from the command line:
 
-:::::{tabs}
-::::{group-tab} Hatch
+:::::{tab-set}
+::::{tab-item} Hatch
+:sync: hatch
 
 ```bash
 hatch test  # test with the highest supported Python version
@@ -166,7 +175,8 @@ hatch test --all  # test with all supported Python versions
 
 ::::
 
-::::{group-tab} uv
+::::{tab-item} uv
+:sync: uv
 
 ```bash
 uv run pytest
@@ -174,7 +184,8 @@ uv run pytest
 
 ::::
 
-::::{group-tab} Pip
+::::{tab-item} Pip
+:sync: pip
 
 ```bash
 source .venv/bin/activate
@@ -213,6 +224,8 @@ This project uses [Sphinx] with the following features:
 - [sphinx-autodoc-typehints] to automatically reference annotated input and output types
 - Citations (like {cite:p}`lange:22`) via [sphinxcontrib-bibtex]
 
+See scanpy's {doc}`scanpy:dev/documentation` for more information on how to write your own.
+
 [Sphinx]: https://www.sphinx-doc.org/en/master/
 [MyST]: https://myst-parser.readthedocs.io/en/latest/intro.html
 [myst-nb]: https://myst-nb.readthedocs.io/en/latest/
@@ -239,8 +252,9 @@ It is your responsibility to update and re-run the notebook whenever necessary.
 
 ### Building the docs locally
 
-:::::{tabs}
-::::{group-tab} Hatch
+:::::{tab-set}
+::::{tab-item} Hatch
+:sync: hatch
 
 ```bash
 hatch run docs:build
@@ -249,7 +263,8 @@ hatch run docs:open
 
 ::::
 
-::::{group-tab} uv
+::::{tab-item} uv
+:sync: uv
 
 ```bash
 cd docs
@@ -259,7 +274,8 @@ open _build/html/index.html  # macOS; use xdg-open on Linux
 
 ::::
 
-::::{group-tab} Pip
+::::{tab-item} Pip
+:sync: pip
 
 ```bash
 source .venv/bin/activate
@@ -270,6 +286,20 @@ open _build/html/index.html  # macOS; use xdg-open on Linux
 
 ::::
 :::::
+
+## Publishing a release
+
+CellRank uses [hatch-vcs] for versioning — the version number is derived automatically from git tags.
+To make a new release:
+
+1. Navigate to the [Releases](https://github.com/theislab/cellrank/releases) page on GitHub.
+2. Click "Draft a new release".
+3. Specify a tag name of the form `vX.Y.Z`, adhering to [Semantic Versioning][semver].
+4. Create the release — this triggers a GitHub workflow that builds and publishes to [PyPI].
+
+[hatch-vcs]: https://pypi.org/project/hatch-vcs/
+[semver]: https://semver.org/
+[PyPI]: https://pypi.org/
 
 ## PR workflow
 
