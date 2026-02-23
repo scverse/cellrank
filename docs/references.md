@@ -1,5 +1,6 @@
-References
-==========
+# References
 
+```{eval-rst}
 .. bibliography::
     :cited:
+```

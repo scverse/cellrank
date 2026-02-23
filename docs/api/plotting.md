@@ -1,12 +1,17 @@
+```{eval-rst}
 .. module:: cellrank.pl
+```
 
-Plotting
-========
-Plotting functions visualize CellRank outputs computed using :doc:`kernels <kernels>`, :doc:`estimators <estimators>`
-or :doc:`models <models>`.
+# Plotting
 
+Plotting functions visualize CellRank outputs computed using {doc}`kernels <kernels>`, {doc}`estimators <estimators>`
+or {doc}`models <models>`.
+
+```{eval-rst}
 .. currentmodule:: cellrank
+```
 
+```{eval-rst}
 .. autosummary::
     :toctree: _autosummary/plotting
 
@@ -16,3 +21,4 @@ or :doc:`models <models>`.
     pl.heatmap
     pl.cluster_trends
     pl.aggregate_fate_probabilities
+```
