@@ -87,4 +87,5 @@ making it the ideal starting point for new users.
 
 Weiler, P. *et al.* [Unified fate mapping in multiview single-cell data.](https://doi.org/10.1038/s41596-024-01108-4) *Nat. Protoc.* (2025).
 
-See {doc}`../notebooks/tutorials/general/100_getting_started` for the introductory tutorial.
+See the [protocol GitHub repository](https://github.com/theislab/cellrank_protocol) for all
+accompanying notebooks and data.

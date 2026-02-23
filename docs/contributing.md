@@ -297,6 +297,10 @@ To make a new release:
 3. Specify a tag name of the form `vX.Y.Z`, adhering to [Semantic Versioning][semver].
 4. Create the release — this triggers a GitHub workflow that builds and publishes to [PyPI].
 
+After the PyPI release, the [conda-forge](https://conda-forge.org/) bot will automatically open a
+PR to update the [CellRank feedstock](https://github.com/conda-forge/cellrank-feedstock). Review and
+merge it to make the new version available via `conda install -c conda-forge cellrank`.
+
 [hatch-vcs]: https://pypi.org/project/hatch-vcs/
 [semver]: https://semver.org/
 [PyPI]: https://pypi.org/
