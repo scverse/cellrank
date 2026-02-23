@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 from cellrank import logging as logg
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
+from cellrank._utils._import_utils import _check_module_importable
 from cellrank._utils._utils import _normalize
 from cellrank.kernels._base_kernel import UnidirectionalKernel
 from cellrank.settings import settings
@@ -253,6 +254,7 @@ class RealTimeKernel(UnidirectionalKernel):
             rtk = cr.kernels.RealTimeKernel.from_moscot(problem)
             rtk = rtk.compute_transition_matrix()
         """
+        _check_module_importable("moscot", extra="moscot")
         from moscot.utils.subset_policy import SequentialPolicy, TriangularPolicy
 
         if not problem.solutions:

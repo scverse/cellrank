@@ -17,6 +17,7 @@ from matplotlib.patches import ArrowStyle
 from cellrank import logging as logg
 from cellrank._utils._colors import _create_categorical_colors
 from cellrank._utils._docs import d, inject_docs
+from cellrank._utils._import_utils import _check_module_importable
 from cellrank._utils._key import Key
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import RandomKeys, TestMethod, _correlation_test, save_fig
@@ -488,20 +489,17 @@ class LinDriversMixin(FateProbsMixin):
                     ax.scatter([], [], color=color, label=key)
 
             if adjust_text:
-                try:
-                    import adjustText
+                _check_module_importable("adjustText", extra="plot")
+                import adjustText
 
-                    start = logg.info("Adjusting text position")
-                    adjustText.adjust_text(
-                        annots,
-                        # https://github.com/theislab/cellrank/issues/1033
-                        x=np.array(adata.varm[dkey][key1], copy=True),
-                        y=np.array(adata.varm[dkey][key2], copy=True),
-                        ax=ax,
-                    )
-                    logg.info("    Finish", time=start)
-                except ImportError:
-                    logg.error("Please install `adjustText` first as `pip install adjustText`")
+                start = logg.info("Adjusting text position")
+                adjustText.adjust_text(
+                    annots,
+                    x=np.array(adata.varm[dkey][key1], copy=True),
+                    y=np.array(adata.varm[dkey][key2], copy=True),
+                    ax=ax,
+                )
+                logg.info("    Finish", time=start)
             if len(annots) and legend_loc not in (None, "none"):
                 _position_legend(ax, legend_loc=legend_loc)
 

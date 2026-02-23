@@ -6,6 +6,7 @@ from typing import Any
 import joblib as jl
 import numpy as np
 import scipy.sparse as sp
+from tqdm.auto import tqdm
 
 __all__ = ["parallelize", "_get_n_cores"]
 
@@ -51,16 +52,6 @@ def parallelize(
     -------
     The result depending on ``callable``, ``extractor`` and ``as_array``.
     """
-    if show_progress_bar:
-        try:
-            from tqdm.auto import tqdm
-        except ImportError:
-            try:
-                from tqdm.std import tqdm
-            except ImportError:
-                tqdm = None
-    else:
-        tqdm = None
 
     def update(pbar, queue, n_total):
         n_finished = 0
@@ -86,7 +77,7 @@ def parallelize(
 
     def wrapper(*args, **kwargs):
         if pass_queue and show_progress_bar:
-            pbar = None if tqdm is None else tqdm(total=col_len, unit=unit, mininterval=0.125)
+            pbar = tqdm(total=col_len, unit=unit, mininterval=0.125)
             queue = multiprocessing.Manager().Queue()
             thread = threading.Thread(target=update, args=(pbar, queue, len(collections)))
             thread.start()
