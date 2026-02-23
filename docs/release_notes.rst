@@ -1,14 +1,6 @@
 Release Notes
 =============
 
-.. toctree::
-    :maxdepth: 3
+All release notes are published on GitHub:
 
-    release/notes-dev
-
-.. toctree::
-    :maxdepth: 3
-    :glob:
-    :reversed:
-
-    release/notes-*.*.*
+`CellRank releases <https://github.com/theislab/cellrank/releases>`__
