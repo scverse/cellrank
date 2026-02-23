@@ -17,6 +17,7 @@ from matplotlib.patches import ArrowStyle
 from cellrank import logging as logg
 from cellrank._utils._colors import _create_categorical_colors
 from cellrank._utils._docs import d, inject_docs
+from cellrank._utils._import_utils import _check_module_importable
 from cellrank._utils._key import Key
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import RandomKeys, TestMethod, _correlation_test, save_fig
@@ -488,8 +489,6 @@ class LinDriversMixin(FateProbsMixin):
                     ax.scatter([], [], color=color, label=key)
 
             if adjust_text:
-                from cellrank._utils._import_utils import _check_module_importable
-
                 _check_module_importable("adjustText", extra="plot")
                 import adjustText
 
