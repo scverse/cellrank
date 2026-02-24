@@ -1,3 +1,5 @@
+import logging
+import time as _time
 import warnings
 from typing import Any
 
@@ -6,11 +8,11 @@ import scipy.sparse as sp
 import scvelo as scv
 from scvelo.tools.velocity_embedding import quiver_autoscale
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._key import Key
 from cellrank.kernels._utils import _get_basis
 
+logger = logging.getLogger(__name__)
 __all__ = ["TmatProjection"]
 
 
@@ -32,8 +34,9 @@ class TmatProjection:
 
         for kernel in kexpr.kernels:
             if not isinstance(kernel, ConnectivityMixin):
-                logg.warning(
-                    f"{kernel!r} is not a kNN based kernel. The embedding projection works best for kNN-based kernels"
+                logger.warning(
+                    "%r is not a kNN based kernel. The embedding projection works best for kNN-based kernels",
+                    kernel,
                 )
                 break
         self._kexpr = kexpr
@@ -70,10 +73,11 @@ class TmatProjection:
         key = f"{self._key}_{self._basis}"
 
         if not recompute and key in self._kexpr.adata.obsm:
-            logg.info(f"Using precomputed projection `adata.obsm[{key!r}]`")
+            logger.info("Using precomputed projection `adata.obsm[%r]`", key)
             return
 
-        start = logg.info(f"Projecting transition matrix onto `{self._basis}`")
+        _start = _time.perf_counter()
+        logger.info("Projecting transition matrix onto %r", self._basis)
         if connectivities is None:
             try:
                 connectivities, *_ = (c.connectivities for c in self._kexpr.kernels if isinstance(c, ConnectivityMixin))
@@ -109,9 +113,10 @@ class TmatProjection:
             self._kexpr.adata.uns[ukey] = self._kexpr.adata.uns.get(ukey, {})
             self._kexpr.adata.uns[ukey]["embeddings"] = embs
 
-        logg.info(
-            f"Adding `adata.obsm[{key!r}]`\n    Finish",
-            time=start,
+        logger.info(
+            "Adding `adata.obsm[%r]` (%.2fs)",
+            key,
+            _time.perf_counter() - _start,
         )
         self._kexpr.adata.obsm[key] = T_emb
 

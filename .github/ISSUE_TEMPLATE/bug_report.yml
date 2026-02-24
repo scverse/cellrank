@@ -21,11 +21,11 @@ body:
     attributes:
       label: Version information
       description: |
-        Please paste the output of `cellrank.logging.print_versions()` below.
+        Please paste the output of `session_info2.session_info()` below.
 
         ```python
-        import cellrank
-        cellrank.logging.print_versions()
+        import session_info2
+        session_info2.session_info()
         ```
       render: text
     validations:

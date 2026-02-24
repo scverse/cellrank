@@ -1,3 +1,5 @@
+import logging
+import time as _time
 import warnings
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
@@ -7,7 +9,6 @@ import scipy.sparse as sp
 from anndata import AnnData
 from scvelo.preprocessing.moments import get_moments
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
 from cellrank.kernels._base_kernel import BidirectionalKernel
@@ -16,6 +17,7 @@ from cellrank.kernels.utils import Deterministic, MonteCarlo, Stochastic
 from cellrank.kernels.utils._similarity import Similarity, SimilarityABC
 from cellrank.kernels.utils._velocity_model import BackwardMode, VelocityModel
 
+logger = logging.getLogger(__name__)
 __all__ = ["VelocityKernel"]
 
 
@@ -83,8 +85,9 @@ class VelocityKernel(ConnectivityMixin, BidirectionalKernel):
         if attr == "layers" and gene_subset is None and f"{vkey}_genes" in self.adata.var:
             gene_subset = self.adata.var[f"{vkey}_genes"]
         elif attr == "obsm" and gene_subset is not None:
-            logg.warning(
-                f"Found `gene_subset != None`, but it is not supported for `adata.{attr}`. Using `gene_subset = None`."
+            logger.warning(
+                "Found `gene_subset != None`, but it is not supported for `adata.%s`. Using `gene_subset = None`.",
+                attr,
             )
             gene_subset = None
 
@@ -142,7 +145,8 @@ class VelocityKernel(ConnectivityMixin, BidirectionalKernel):
         -------
         Returns self and updates :attr:`transition_matrix`, :attr:`logits` and :attr:`params`.
         """
-        start = logg.info(f"Computing transition matrix using `{model!r}` model")
+        _start = _time.perf_counter()
+        logger.info("Computing transition matrix using %r model", model)
 
         if VelocityModel(model) != VelocityModel.DETERMINISTIC:
             warnings.warn(
@@ -159,12 +163,12 @@ class VelocityKernel(ConnectivityMixin, BidirectionalKernel):
         if VelocityModel(model) == VelocityModel.MONTE_CARLO:
             params["n_samples"] = n_samples
             params["seed"] = seed
-        if self._reuse_cache(params, time=start):
+        if self._reuse_cache(params):
             return self
 
         if softmax_scale is None:
             softmax_scale = self._estimate_softmax_scale(backward_mode=backward_mode, similarity=similarity)
-            logg.info(f"Using `softmax_scale={softmax_scale:.4f}`")
+            logger.info("Using `softmax_scale=%.4f`", softmax_scale)
             params["softmax_scale"] = softmax_scale
         # fmt: on
 
@@ -180,7 +184,7 @@ class VelocityKernel(ConnectivityMixin, BidirectionalKernel):
             kwargs["backend"] = DEFAULT_BACKEND
         self.transition_matrix, self._logits = model(**kwargs)
 
-        logg.info("    Finish", time=start)
+        logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
 
         return self
 
@@ -202,18 +206,21 @@ class VelocityKernel(ConnectivityMixin, BidirectionalKernel):
             raise TypeError(f"Expected `scheme` to be a function, found `{type(similarity).__name__}`.")
 
         if self.backward and model != VelocityModel.DETERMINISTIC:
-            logg.warning(
-                f"Mode `{model!r}` is currently not supported for backward process. "
-                f"Using to `mode={VelocityModel.DETERMINISTIC!r}`"
+            logger.warning(
+                "Mode `%r` is currently not supported for backward process. Using to `mode=%r`",
+                model,
+                VelocityModel.DETERMINISTIC,
             )
             model = VelocityModel.DETERMINISTIC
 
         if model == VelocityModel.STOCHASTIC and not hasattr(similarity, "hessian"):
             model = VelocityModel.MONTE_CARLO
-            logg.warning(
-                f"Unable to detect a method for Hessian computation. If using one of the "
-                f"predefined similarity functions, consider installing `jax` as "
-                f"`pip install jax`. Using `mode={model!r}` and `n_samples={n_samples}`"
+            logger.warning(
+                "Unable to detect a method for Hessian computation. If using one of the "
+                "predefined similarity functions, consider installing `jax` as "
+                "`pip install jax`. Using `mode=%r` and `n_samples=%s`",
+                model,
+                n_samples,
             )
 
         if model == VelocityModel.DETERMINISTIC:

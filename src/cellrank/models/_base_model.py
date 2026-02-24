@@ -2,6 +2,7 @@ import abc
 import collections
 import copy
 import enum
+import logging
 import re
 import warnings
 from collections.abc import Callable, Mapping, Sequence
@@ -20,13 +21,13 @@ from pandas.api.types import infer_dtype
 from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scipy.ndimage import convolve
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import _densify_squeeze, _minmax, save_fig, valuedispatch
 from cellrank.kernels.mixins import IOMixin
 
+logger = logging.getLogger(__name__)
 __all__ = ["BaseModel"]
 
 _dup_spaces = re.compile(r" +")  # used on repr for underlying model's repr
@@ -1096,7 +1097,7 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
             if np.issubdtype(self.adata.obs[key].dtype, np.number):
                 return key, self.adata.obs[key].values, ColorType.CONT, None
 
-            logg.debug(f"Unable to interpret cell color from type `{infer_dtype(self.adata.obs[key])}`")
+            logger.debug("Unable to interpret cell color from type `%s`", infer_dtype(self.adata.obs[key]))
             return None, "black", ColorType.STR, None
 
         if self._use_raw and key in self.adata.raw.var_names:
@@ -1116,9 +1117,10 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
                 None,
             )
         except KeyError:
-            logg.debug(
-                f"Key `{key!r}` not found in `adata.obs` or "
-                f"`adata{'.raw' if self._use_raw else ''}.var_names`. Ignoring`"
+            logger.debug(
+                "Key `%r` not found in `adata.obs` or `adata%s.var_names`. Ignoring`",
+                key,
+                ".raw" if self._use_raw else "",
             )
 
         if same_plot or np.allclose(self.w_all, 1.0):
@@ -1304,7 +1306,7 @@ class FittedModel(BaseModel):
             if self.conf_int.shape != (self.x_test.shape[0], 2):
                 raise ValueError(f"Expected `conf_int` to be of shape `({self.x_test.shape[0]}, 2)`.")
         else:
-            logg.debug("No `conf_int` have been supplied, will be ignored during plotting")
+            logger.debug("No `conf_int` have been supplied, will be ignored during plotting")
 
         if x_all is not None and y_all is not None:
             self._x_all = _densify_squeeze(x_all, self._dtype)[:, np.newaxis]
@@ -1324,10 +1326,10 @@ class FittedModel(BaseModel):
                         f"Expected `w_all` to be of shape `({self.x_all.shape[0]},)`, found `{self.w_all.shape}`."
                     )
             else:
-                logg.debug("Setting `w_all` to an array of `1`")
+                logger.debug("Setting `w_all` to an array of `1`")
                 self._w_all = np.ones_like(self.x_all, dtype=np.float64).squeeze(1)
         else:
-            logg.debug(
+            logger.debug(
                 "None or partially incomplete `x_all` and `y_all` have been supplied, will be ignored during plotting"
             )
 

@@ -1,3 +1,4 @@
+import logging
 import pathlib
 import types
 from collections.abc import Mapping, Sequence
@@ -10,7 +11,6 @@ import pandas as pd
 from anndata import AnnData
 from matplotlib import cm
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
@@ -33,6 +33,7 @@ from cellrank.pl._utils import (
     _trends_helper,
 )
 
+logger = logging.getLogger(__name__)
 __all__ = ["gene_trends"]
 
 
@@ -188,7 +189,7 @@ def gene_trends(
     elif all(ln is None for ln in lineages):  # no lineage, all the weights are 1
         lineages = [None]
         cbar = False
-        logg.debug("All lineages are `None`, setting the weights to `1`")
+        logger.debug("All lineages are `None`, setting the weights to `1`")
     lineages = _unique_order_preserving(lineages)
 
     if isinstance(time_range, (tuple, float, int, type(None))):
@@ -272,7 +273,7 @@ def gene_trends(
     cnt = 0
     plot_kwargs["obs_legend_loc"] = None if same_plot else obs_legend_loc
 
-    logg.info("Plotting trends")
+    logger.info("Plotting trends")
     for row in range(len(axes)):
         for col in range(len(axes[row])):
             if cnt >= len(genes):

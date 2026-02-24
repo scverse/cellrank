@@ -1,6 +1,8 @@
 import contextlib
 import io
+import logging
 import pathlib
+import time as _time
 import types
 from collections.abc import Mapping
 from typing import Any, Literal
@@ -14,13 +16,13 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pygpcca import GPCCA
 from pygpcca._sorted_schur import _check_conj_split
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._key import Key
 from cellrank._utils._linear_solver import _is_petsc_slepc_available
 from cellrank._utils._utils import _eigengap, save_fig
-from cellrank.estimators.mixins._utils import BaseProtocol, SafeGetter, logger, shadow
+from cellrank.estimators.mixins._utils import BaseProtocol, SafeGetter, log_writer, shadow
 
+logger = logging.getLogger(__name__)
 __all__ = ["SchurMixin"]
 
 EPS = np.finfo(np.float64).eps
@@ -143,8 +145,9 @@ class SchurMixin:
         - :attr:`eigendecomposition` - %(eigen.summary)s
         """
         if n_components < 2:
-            logg.warning(
-                f"Number of Schur vectors `>=2`, but only `{n_components}` were requested. Using `n_components=2`"
+            logger.warning(
+                "Number of Schur vectors `>=2`, but only `%s` were requested. Using `n_components=2`",
+                n_components,
             )
             n_components = 2
 
@@ -153,17 +156,18 @@ class SchurMixin:
 
         if not _is_petsc_slepc_available():
             method = "brandts"
-            logg.warning(f"Unable to import `petsc4py` or `slepc4py`. Using `method={method!r}`")
+            logger.warning("Unable to import `petsc4py` or `slepc4py`. Using `method=%r`", method)
         if verbose is None:
             verbose = method == "brandts"
 
         tmat = self.transition_matrix
         if method == "brandts" and sp.issparse(tmat):
-            logg.warning("For `method='brandts'`, dense matrix is required. Densifying")
+            logger.warning("For `method='brandts'`, dense matrix is required. Densifying")
             tmat = tmat.toarray()
 
         self._gpcca = GPCCA(tmat, eta=initial_distribution, z=which, method=method)
-        start = logg.info("Computing Schur decomposition")
+        _start = _time.perf_counter()
+        logger.info("Computing Schur decomposition")
 
         with (contextlib.nullcontext if verbose else contextlib.redirect_stdout)(io.StringIO()):
             try:
@@ -171,9 +175,11 @@ class SchurMixin:
             except ValueError as e:
                 if "will split complex conjugate eigenvalues" not in str(e):
                     raise
-                logg.warning(
-                    f"Using `{n_components}` components would split a block of complex conjugate eigenvalues. "
-                    f"Using `n_components={n_components + 1}`"
+                logger.warning(
+                    "Using `%s` components would split a block of complex conjugate eigenvalues. "
+                    "Using `n_components=%s`",
+                    n_components,
+                    n_components + 1,
                 )
                 self._gpcca._do_schur_helper(n_components + 1)
 
@@ -181,7 +187,10 @@ class SchurMixin:
             [i for i in range(2, len(self._gpcca._p_eigenvalues)) if _check_conj_split(self._gpcca._p_eigenvalues[:i])]
         )
         if len(self._invalid_n_states):
-            logg.info(f"When computing macrostates, choose a number of states NOT in `{list(self._invalid_n_states)}`")
+            logger.info(
+                "When computing macrostates, choose a number of states NOT in `%s`",
+                list(self._invalid_n_states),
+            )
 
         self._write_schur_decomposition(
             {
@@ -196,7 +205,7 @@ class SchurMixin:
             vectors=self._gpcca._p_X,
             matrix=self._gpcca._p_R,
             params=self._create_params(),
-            time=start,
+            time=_start,
         )
         return self
 
@@ -265,7 +274,7 @@ class SchurMixin:
         if save is not None:
             save_fig(fig, path=save)
 
-    @logger
+    @log_writer
     @shadow
     def _write_schur_decomposition(
         self: SchurProtocol,

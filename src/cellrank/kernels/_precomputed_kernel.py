@@ -1,15 +1,16 @@
+import logging
 from typing import Any
 
 import numpy as np
 import scipy.sparse as sp
 from anndata import AnnData
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._key import Key
 from cellrank._utils._utils import _read_graph_data
 from cellrank.kernels._base_kernel import KernelExpression, UnidirectionalKernel
 
+logger = logging.getLogger(__name__)
 __all__ = ["PrecomputedKernel"]
 
 
@@ -101,7 +102,7 @@ class PrecomputedKernel(UnidirectionalKernel):
                     )
             else:
                 obsp_key = Key.uns.kernel(backward)
-            logg.info(f"Using transition matrix from `adata.obsp[{obsp_key!r}]`")
+            logger.info("Using transition matrix from `adata.obsp[%r]`", obsp_key)
 
         tmat = _read_graph_data(adata, obsp_key)
 
@@ -113,7 +114,7 @@ class PrecomputedKernel(UnidirectionalKernel):
                 backward = True
             else:
                 backward = None
-            logg.info(f"Setting directionality `backward={backward}`")
+            logger.info("Setting directionality `backward=%s`", backward)
 
         self._from_matrix(tmat, adata=adata, backward=backward, copy=copy)
         self.params["origin"] = f"adata.obsp[{obsp_key!r}]"
@@ -140,7 +141,7 @@ class PrecomputedKernel(UnidirectionalKernel):
     ) -> None:
         # fmt: off
         if adata is None:
-            logg.warning(f"Creating empty `AnnData` object of shape `{matrix.shape[0], 1}`")
+            logger.warning("Creating empty `AnnData` object of shape `%s`", (matrix.shape[0], 1))
             adata = AnnData(sp.csr_matrix((matrix.shape[0], 1)))
         super().__init__(adata)
         self._backward: bool | None = backward

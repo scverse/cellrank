@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -14,12 +15,12 @@ from pandas.api.types import infer_dtype
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from cellrank import logging as logg
 from cellrank._utils._colors import _create_categorical_colors
 from cellrank._utils._docs import d
 from cellrank._utils._utils import _unique_order_preserving
 from cellrank.kernels._utils import _ensure_numeric_ordered
 
+logger = logging.getLogger(__name__)
 __all__ = ["FlowPlotter"]
 
 Numeric_t = float | int
@@ -130,9 +131,11 @@ class FlowPlotter:
 
         time_points = list(zip(self.time.cat.categories[:-1], self.time.cat.categories[1:]))
 
-        logg.info(
-            f"Computing flow from `{cluster}` into `{len(self._clusters) - 1}` cluster(s) "
-            f"in `{len(time_points)}` time points"
+        logger.info(
+            "Computing flow from `%s` into `%s` cluster(s) in `%s` time points",
+            cluster,
+            len(self._clusters) - 1,
+            len(time_points),
         )
         self._cluster = cluster
         self._cmat = self.compute_contingency_matrix()
@@ -254,9 +257,11 @@ class FlowPlotter:
         try:
             if remove_empty_clusters:
                 self._remove_min_clusters(min_flow)
-            logg.info(
-                f"Plotting flow from `{self._cluster}` into `{len(self._flow.columns) - 1}` cluster(s) "
-                f"in `{len(self._cmat.columns) - 1}` time points"
+            logger.info(
+                "Plotting flow from `%s` into `%s` cluster(s) in `%s` time points",
+                self._cluster,
+                len(self._flow.columns) - 1,
+                len(self._cmat.columns) - 1,
             )
             return self._plot(
                 self._rename_times(),
@@ -287,7 +292,7 @@ class FlowPlotter:
         return self._tmat[row_ixs, :][:, col_ixs], row_cls, col_cls
 
     def _remove_min_clusters(self, min_flow: float) -> None:
-        logg.debug("Removing clusters with no incoming flow edges")
+        logger.debug("Removing clusters with no incoming flow edges")
         columns = (self._flow.loc[(slice(None), self._cluster), :] > min_flow).any()
         columns = columns[columns].index
         if not len(columns):

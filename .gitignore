@@ -177,3 +177,4 @@ uv.lock
 
 # Copilot prompts (local-only development aids)
 .github/prompts/
+data/

@@ -1,4 +1,5 @@
 import itertools
+import logging
 import os
 import pathlib
 import types
@@ -13,7 +14,6 @@ from anndata import AnnData
 from pandas.api.types import infer_dtype
 from tqdm.auto import tqdm
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._import_utils import _check_module_importable
@@ -21,6 +21,7 @@ from cellrank._utils._utils import _normalize
 from cellrank.kernels._base_kernel import UnidirectionalKernel
 from cellrank.settings import settings
 
+logger = logging.getLogger(__name__)
 __all__ = ["RealTimeKernel"]
 
 if TYPE_CHECKING:
@@ -413,9 +414,7 @@ class RealTimeKernel(UnidirectionalKernel):
         elif self_transitions == SelfTransitions.CONNECTIVITIES:
             blocks[ref_ix][ref_ix] = _compute_connectivity_tmat(self.adata[ref_mask], **conn_kwargs)
         elif isinstance(self_transitions, tuple):
-            verbosity = settings.verbosity
-            try:  # ignore overly verbose logging
-                settings.verbosity = 0
+            with settings.override_logging_level(logging.ERROR):
                 for (src, tgt), coupling in couplings.items():
                     # fmt: off
                     if src not in self_transitions:
@@ -427,8 +426,6 @@ class RealTimeKernel(UnidirectionalKernel):
                     blocks[src_ix][tgt_ix] = (1 - conn_weight) * _normalize(blocks[src_ix][tgt_ix])
                     # fmt: on
                 blocks[ref_ix][ref_ix] = _compute_connectivity_tmat(self.adata[ref_mask], **conn_kwargs)
-            finally:
-                settings.verbosity = verbosity
         else:
             raise NotImplementedError(f"Self transitions' mode `{self_transitions}` is not yet implemented.")
 
@@ -485,9 +482,9 @@ class RealTimeKernel(UnidirectionalKernel):
         """
         if threshold == "auto":
             thresh = min(adata.X[i].max() for adata in couplings.values() for i in range(adata.n_obs))
-            logg.info(f"Using automatic `threshold={thresh}`")
+            logger.info("Using automatic `threshold=%s`", thresh)
         elif threshold == "auto_local":
-            logg.info("Using automatic `threshold` for each coupling separately")
+            logger.info("Using automatic `threshold` for each coupling separately")
         elif not (0 <= threshold <= 100):
             raise ValueError(f"Expected `threshold` to be in `[0, 100]`, found `{threshold}`.`")
 
@@ -500,10 +497,10 @@ class RealTimeKernel(UnidirectionalKernel):
 
             if threshold == "auto_local":
                 thresh = min(tmat[i].max() for i in range(tmat.shape[0]))
-                logg.debug(f"Using `threshold={thresh}` at `{key}`")
+                logger.debug("Using `threshold=%s` at `%s`", thresh, key)
             elif isinstance(threshold, (int, float, np.number)):
                 thresh = np.percentile(tmat.data, threshold)
-                logg.debug(f"Using `threshold={thresh}` at `{key}`")
+                logger.debug("Using `threshold=%s` at `%s`", thresh, key)
 
             tmat = sp.csr_matrix(tmat, dtype=tmat.dtype)
             tmat.data[tmat.data < thresh] = 0.0
@@ -558,9 +555,11 @@ class RealTimeKernel(UnidirectionalKernel):
             tmat = coupling.X
             zeros_mask = np.where(np.asarray(tmat.sum(1)).squeeze() == 0)[0]
             if np.any(zeros_mask):
-                logg.warning(
-                    f"Coupling at `{key}` contains `{len(zeros_mask)}` empty row(s), e.g., due to "
-                    f"unbalancedness or 0s in the source marginals. Using uniform distribution"
+                logger.warning(
+                    "Coupling at `%s` contains `%s` empty row(s), e.g., due to "
+                    "unbalancedness or 0s in the source marginals. Using uniform distribution",
+                    key,
+                    len(zeros_mask),
                 )
                 tmat[zeros_mask] = np.ones((len(zeros_mask), tmat.shape[1]), dtype=tmat.dtype) / tmat.shape[1]
 

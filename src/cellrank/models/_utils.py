@@ -1,4 +1,5 @@
 import enum
+import logging
 from collections.abc import Sequence
 from typing import Any
 
@@ -9,11 +10,12 @@ from anndata import AnnData
 from numba import prange
 from sklearn.utils.sparsefuncs import csc_median_axis_0
 
-import cellrank.logging as logg
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._parallelize import parallelize
 from cellrank._utils._utils import valuedispatch
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["_get_offset"]
 
@@ -448,7 +450,7 @@ def _get_knotlocs(
     else:
         knotlocs = x
 
-    logg.debug(f"Setting knot locations to `{list(knotlocs)}`")
+    logger.debug("Setting knot locations to `%s`", list(knotlocs))
 
     return knotlocs
 
@@ -486,16 +488,16 @@ def _get_offset(
     """
     with np.errstate(divide="ignore", invalid="ignore"):
         if not recompute and isinstance(adata, AnnData) and _OFFSET_KEY in adata.obs:
-            logg.debug(f"Fetching offset from `adata.obs[{_OFFSET_KEY!r}]`")
+            logger.debug("Fetching offset from `adata.obs[%r]`", _OFFSET_KEY)
             return adata.obs[_OFFSET_KEY].values.copy()
 
-        logg.debug(f"Calculating offset for `{adata.shape[0]}` cells")
+        logger.debug("Calculating offset for `%s` cells", adata.shape[0])
 
         data = _extract_data(adata, layer=layer, use_raw=use_raw)
         try:
             nf = _calculate_norm_factors(adata, layer=layer, use_raw=use_raw, ref_ix=ref_ix, **kwargs)
         except Exception as e:  # noqa: BLE001
-            logg.debug(f"Unable to calculate the normalization factors, setting them to `1`. Reason: `{e}`")
+            logger.debug("Unable to calculate the normalization factors, setting them to `1`. Reason: `%s`", e)
             nf = np.ones(len(adata), dtype=np.float64)
 
         offset = np.log(nf * np.array(data.sum(1)).squeeze())
@@ -503,7 +505,7 @@ def _get_offset(
 
         mask = ~np.isfinite(offset) | np.isnan(offset)
         if np.any(mask):
-            logg.warning(f"`{np.sum(mask)}` elements are not finite. Setting them to `1`")
+            logger.warning("`%s` elements are not finite. Setting them to `1`", np.sum(mask))
             offset[mask] = 1.0
 
         if isinstance(adata, AnnData):

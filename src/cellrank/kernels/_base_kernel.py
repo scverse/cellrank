@@ -1,5 +1,6 @@
 import abc
 import copy
+import logging
 import pathlib
 from collections.abc import Callable, Sequence
 from typing import Any, Optional, Union
@@ -10,7 +11,6 @@ import scipy.sparse as sp
 from anndata import AnnData
 from matplotlib.colors import LinearSegmentedColormap
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._key import Key
 from cellrank._utils._utils import _normalize, _read_graph_data, save_fig
@@ -19,6 +19,7 @@ from cellrank.kernels.mixins import BidirectionalMixin, IOMixin, UnidirectionalM
 from cellrank.kernels.utils import FlowPlotter, RandomWalk, TmatProjection
 from cellrank.kernels.utils._random_walk import Indices_t
 
+logger = logging.getLogger(__name__)
 __all__ = ["Kernel", "UnidirectionalKernel", "BidirectionalKernel"]
 
 Tmat_t = np.ndarray | sp.spmatrix
@@ -440,21 +441,20 @@ class KernelExpression(IOMixin, abc.ABC):
             return self._params
         return {f"{k!r}:{i}": k.params for i, k in enumerate(self.kernels)}
 
-    def _reuse_cache(self, expected_params: dict[str, Any], *, time: Any | None = None) -> bool:
+    def _reuse_cache(self, expected_params: dict[str, Any]) -> bool:
         # fmt: off
         try:
             if expected_params == self._params:
                 assert self.transition_matrix is not None
-                logg.debug("Using cached transition matrix")
-                logg.info("    Finish", time=time)
+                logger.debug("Using cached transition matrix")
                 return True
             return False
         except AssertionError:
-            logg.warning("Transition matrix does not exist for the given parameters. Recomputing")
+            logger.warning("Transition matrix does not exist for the given parameters. Recomputing")
             return False
         except Exception as e:  # noqa: BLE001
             # e.g. the dict is not comparable
-            logg.warning(f"Expected and actually parameters are not comparable, reason `{e}`. Recomputing")
+            logger.warning("Expected and actually parameters are not comparable, reason `%s`. Recomputing", e)
             expected_params = {}  # clear the params
             return False
         finally:

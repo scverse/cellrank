@@ -1,110 +1,79 @@
-# modified from: https://github.com/theislab/scanpy/blob/master/scanpy/tests/test_logging.py
-import datetime
-import io
-import sys
+import logging
 
 import pytest
-from scanpy import Verbosity
 
-from cellrank import logging as logg
-from cellrank import settings
+from cellrank._settings import _LOGGER_NAME, CellRankConfig, _setup_logger
 
 
 @pytest.fixture
-def logging_state():  # noqa: PT004
-    verbosity_orig = settings.verbosity
-    yield
-    settings.logfile = sys.stderr
-    settings.verbosity = verbosity_orig
+def fresh_logger():
+    """Provide a clean cellrank logger for each test."""
+    log = logging.getLogger(_LOGGER_NAME)
+    old_handlers = log.handlers[:]
+    old_level = log.level
+    yield log
+    log.handlers = old_handlers
+    log.setLevel(old_level)
 
 
-class TestLogging:
-    def test_formats(self, capsys, logging_state):
-        settings.logfile = sys.stderr
-        settings.verbosity = Verbosity.debug
-        logg.error("0")
-        assert capsys.readouterr().err == "ERROR: 0\n"
-        logg.warning("1")
-        assert capsys.readouterr().err == "WARNING: 1\n"
-        logg.info("2")
-        assert capsys.readouterr().err == "2\n"
-        logg.hint("3")
-        assert capsys.readouterr().err == "--> 3\n"
-        # TODO: this still uses scanpy's logger, but in e.g. notebooks it's fine
-        # logg.debug("4")
-        # assert capsys.readouterr().err == "DEBUG: 4\n"
+class TestSetupLogger:
+    def test_adds_handler(self, fresh_logger):
+        fresh_logger.handlers.clear()
+        _setup_logger()
+        assert len(fresh_logger.handlers) == 1
 
-    def test_deep(self, capsys, logging_state):
-        settings.logfile = sys.stderr
-        settings.verbosity = Verbosity.hint
-        logg.hint("0")
-        assert capsys.readouterr().err == "--> 0\n"
-        logg.hint("1", deep="1!")
-        assert capsys.readouterr().err == "--> 1\n"
-        settings.verbosity = Verbosity.debug
-        logg.hint("2")
-        assert capsys.readouterr().err == "--> 2\n"
-        logg.hint("3", deep="3!")
-        assert capsys.readouterr().err == "--> 3: 3!\n"
+    def test_idempotent(self, fresh_logger):
+        n = len(fresh_logger.handlers)
+        _setup_logger()
+        assert len(fresh_logger.handlers) == n
 
-    def test_logfile(self, tmp_path, logging_state):
-        settings.verbosity = Verbosity.hint
+    def test_default_level(self, fresh_logger):
+        fresh_logger.handlers.clear()
+        fresh_logger.setLevel(logging.NOTSET)
+        _setup_logger()
+        assert fresh_logger.level == logging.INFO
 
-        buffer = io.StringIO()
-        settings.logfile = buffer
-        assert settings.logfile is buffer
-        assert settings.logpath is None
-        logg.error("test!")
-        assert buffer.getvalue() == "ERROR: test!\n"
 
-        p = tmp_path / "test.log"
-        settings.logpath = p
-        assert settings.logpath == p
-        assert settings.logfile.name == str(p)
-        logg.hint("test2")
-        logg.debug("invisible")
-        assert settings.logpath.read_text() == "--> test2\n"
+class TestCellRankConfig:
+    def test_logging_level_default(self):
+        cfg = CellRankConfig()
+        # Default set by _setup_logger
+        assert logging.getLogger(_LOGGER_NAME).level == cfg.logging_level
 
-    def test_timing(self, monkeypatch, capsys, logging_state):
-        import cellrank.logging._logging as logg
+    def test_logging_level_set(self, fresh_logger):
+        cfg = CellRankConfig()
+        cfg.logging_level = logging.DEBUG
+        assert fresh_logger.level == logging.DEBUG
+        cfg.logging_level = "WARNING"
+        assert fresh_logger.level == logging.WARNING
 
-        class IncTime:
-            def __init__(self):
-                self.counter = 0
+    def test_override_logging_level(self, fresh_logger):
+        cfg = CellRankConfig()
+        original = fresh_logger.level
+        with cfg.override_logging_level(logging.DEBUG):
+            assert fresh_logger.level == logging.DEBUG
+        assert fresh_logger.level == original
 
-            def now(self, tz):
-                self.counter += 1
-                return datetime.datetime(2000, 1, 1, second=self.counter, microsecond=self.counter, tzinfo=tz)
+    def test_override_logging_level_restores_on_error(self, fresh_logger):
+        cfg = CellRankConfig()
+        original = fresh_logger.level
+        with pytest.raises(RuntimeError), cfg.override_logging_level(logging.DEBUG):
+            raise RuntimeError("boom")
+        assert fresh_logger.level == original
 
-            @property
-            def datetime(self) -> "IncTime":
-                return self
+    def test_figdir_default(self):
+        from pathlib import Path
 
-            @property
-            def timezone(self):
-                return datetime.timezone
+        cfg = CellRankConfig()
+        assert cfg.figdir == Path("./figures")
 
-            @property
-            def UTC(self):
-                return datetime.UTC
+    def test_figdir_set(self, tmp_path):
+        cfg = CellRankConfig()
+        cfg.figdir = tmp_path
+        assert cfg.figdir == tmp_path
 
-        settings.logfile = sys.stderr
-        t = IncTime()
-        monkeypatch.setattr(logg, "datetime", t)
-        settings.verbosity = Verbosity.debug
-
-        logg.hint("1")
-        assert t.counter == 1
-        assert capsys.readouterr().err == "--> 1\n"
-        start = logg.info("2")
-        assert t.counter == 2
-        assert capsys.readouterr().err == "2\n"
-        logg.hint("3")
-        assert t.counter == 3
-        assert capsys.readouterr().err == "--> 3\n"
-        logg.info("4", time=start)
-        assert t.counter == 4
-        assert capsys.readouterr().err == "4 (0:00:02)\n"
-        logg.info("5 {time_passed}", time=start)
-        assert t.counter == 5
-        assert capsys.readouterr().err == "5 0:00:03\n"
+    def test_child_logger_inherits(self, fresh_logger):
+        cfg = CellRankConfig()
+        cfg.logging_level = logging.DEBUG
+        child = logging.getLogger(f"{_LOGGER_NAME}.test_child")
+        assert child.getEffectiveLevel() == logging.DEBUG

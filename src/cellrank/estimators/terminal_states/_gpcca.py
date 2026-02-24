@@ -1,7 +1,8 @@
 import collections
-import datetime
 import enum
+import logging
 import pathlib
+import time as _time
 import types
 import warnings
 from collections.abc import Mapping, Sequence
@@ -20,7 +21,6 @@ from matplotlib.colors import ListedColormap, Normalize
 from matplotlib.ticker import StrMethodFormatter
 from pandas.api.types import infer_dtype
 
-from cellrank import logging as logg
 from cellrank._utils._colors import _create_categorical_colors, _get_black_or_white
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
@@ -33,12 +33,13 @@ from cellrank._utils._utils import (
     save_fig,
 )
 from cellrank.estimators.mixins import EigenMixin, LinDriversMixin, SchurMixin
-from cellrank.estimators.mixins._utils import SafeGetter, StatesHolder, logger, shadow
+from cellrank.estimators.mixins._utils import SafeGetter, StatesHolder, log_writer, shadow
 from cellrank.estimators.terminal_states._term_states_estimator import (
     TermStatesEstimator,
 )
 from cellrank.kernels._base_kernel import KernelExpression
 
+logger = logging.getLogger(__name__)
 __all__ = ["GPCCA"]
 
 
@@ -192,12 +193,14 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
         if self._gpcca._p_X.shape[1] < n_states:
             # precomputed X
-            logg.warning(
-                f"Requested more macrostates `{n_states}` than available "
-                f"Schur vectors `{self._gpcca._p_X.shape[1]}`. Recomputing the decomposition"
+            logger.warning(
+                "Requested more macrostates `%s` than available Schur vectors `%s`. Recomputing the decomposition",
+                n_states,
+                self._gpcca._p_X.shape[1],
             )
 
-        start = logg.info(f"Computing `{n_states}` macrostates")
+        _start = _time.perf_counter()
+        logger.info("Computing %d macrostates", n_states)
         try:
             self._gpcca = self._gpcca.optimize(m=n_states)
         except ValueError as e:
@@ -206,9 +209,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             # this is the following case - we have 4 Schur vectors, user requests 5 states, but it splits the conj. ev.
             # in the try block, Schur decomposition with 5 vectors is computed, but it fails (no way of knowing)
             # so in this case, we increase it by 1
-            logg.warning(
-                f"Unable to compute macrostates with `n_states={n_states}` because it will "
-                f"split complex conjugate eigenvalues. Using `n_states={n_states + 1}`"
+            logger.warning(
+                "Unable to compute macrostates with `n_states=%s` because it will "
+                "split complex conjugate eigenvalues. Using `n_states=%s`",
+                n_states,
+                n_states + 1,
             )
             self._gpcca = self._gpcca.optimize(m=n_states + 1)
 
@@ -217,7 +222,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             n_cells=n_cells,
             cluster_key=cluster_key,
             params=self._create_params(),
-            time=start,
+            time=_start,
         )
         return self
 
@@ -292,7 +297,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             raise RuntimeError("Compute macrostates first as `.compute_macrostates()`.")
 
         if len(self.macrostates.cat.categories) == 1:
-            logg.warning("Found only one macrostate, making it the singular terminal state")
+            logger.warning("Found only one macrostate, making it the singular terminal state")
             return self.set_terminal_states(
                 states=None,
                 n_cells=n_cells,
@@ -832,9 +837,10 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             order = CoarseTOrder(order)
             if order == CoarseTOrder.STAT_DIST and stat_d is None:
                 order = CoarseTOrder.STABILITY
-                logg.warning(
-                    f"Unable to order by `{CoarseTOrder.STAT_DIST}`, no coarse stationary distribution. "
-                    f"Using `order={order}`"
+                logger.warning(
+                    "Unable to order by `%s`, no coarse stationary distribution. Using `order=%s`",
+                    CoarseTOrder.STAT_DIST,
+                    order,
                 )
 
             if order == CoarseTOrder.INCOMING:
@@ -924,10 +930,10 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
         coarse_T, coarse_init_d, coarse_stat_d = order_matrix(order)
         if show_stationary_dist and coarse_stat_d is None:
-            logg.warning("Coarse stationary distribution is `None`, ignoring")
+            logger.warning("Coarse stationary distribution is `None`, ignoring")
             show_stationary_dist = False
         if show_initial_dist and coarse_init_d is None:
-            logg.warning("Coarse initial distribution is `None`, ignoring")
+            logger.warning("Coarse initial distribution is `None`, ignoring")
             show_initial_dist = False
 
         hrs, wrs = [1], [1]
@@ -1166,17 +1172,18 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         minn, maxx = sorted(n_states)
         if minn <= 1:
             minn = 2
-            logg.warning(f"Minimum value must be larger than `1`, found `{minn}`. Setting `min={minn}`")
+            logger.warning("Minimum value must be larger than `1`, found `%s`. Setting `min=%s`", minn, minn)
         if minn == 2:
             minn = 3
-            logg.warning(
-                f"In most cases, 2 clusters will always be optimal. "
-                f"If you really expect 2 clusters, use `n_states=2`. Setting `min={minn}`"
+            logger.warning(
+                "In most cases, 2 clusters will always be optimal. "
+                "If you really expect 2 clusters, use `n_states=2`. Setting `min=%s`",
+                minn,
             )
         # fmt: on
         maxx = max(minn + 1, maxx)
 
-        logg.info(f"Calculating minChi criterion in interval `[{minn}, {maxx}]`")
+        logger.info("Calculating minChi criterion in interval `[%s, %s]`", minn, maxx)
 
         return int(np.arange(minn, maxx + 1)[np.argmax(self._gpcca.minChi(minn, maxx))])
 
@@ -1208,9 +1215,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
     def _validate_n_states(self, n_states: int) -> int:
         if self._invalid_n_states is not None and n_states in self._invalid_n_states:
-            logg.warning(
-                f"Unable to compute macrostates with `n_states={n_states}` because it will "
-                f"split complex conjugate eigenvalues. Using `n_states={n_states + 1}`"
+            logger.warning(
+                "Unable to compute macrostates with `n_states=%s` because it will "
+                "split complex conjugate eigenvalues. Using `n_states=%s`",
+                n_states,
+                n_states + 1,
             )
             n_states += 1  # cannot force recomputation of the Schur decomposition
             assert n_states not in self._invalid_n_states, "Sanity check failed."
@@ -1222,7 +1231,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         n_cells: int | None,
         cluster_key: str | None,
     ) -> None:
-        start = logg.info("For 1 macrostate, stationary distribution is computed")
+        _start = _time.perf_counter()
+        logger.info("For 1 macrostate, stationary distribution is computed")
 
         eig = self.eigendecomposition
         if eig is not None and "stationary_dist" in eig and eig["params"]["which"] == "LR":
@@ -1236,7 +1246,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             n_cells=n_cells,
             cluster_key=cluster_key,
             check_row_sums=False,
-            time=start,
+            time=_start,
         )
 
     @d.dedent
@@ -1246,7 +1256,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         n_cells: int | None = 30,
         cluster_key: str = "clusters",
         check_row_sums: bool = True,
-        time: datetime.datetime | None = None,
+        time: float | None = None,
         params: dict[str, Any] = types.MappingProxyType({}),
     ) -> None:
         """Map fuzzy clustering to pre-computed annotations to get names and colors.
@@ -1274,13 +1284,13 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         """
         if n_cells is None:
             # fmt: off
-            logg.debug("Setting the macrostates using macrostate assignment")
+            logger.debug("Setting the macrostates using macrostate assignment")
             assignment = pd.Series(np.argmax(memberships, axis=1).astype(str), dtype="category")
             # sometimes, a category can be missing
             assignment = assignment.cat.reorder_categories([str(i) for i in range(memberships.shape[1])])
             # fmt: on
         else:
-            logg.debug("Setting the macrostates using macrostates memberships")
+            logger.debug("Setting the macrostates using macrostates memberships")
 
             # select the most likely cells from each macrostate
             assignment, not_enough_cells = self._create_states(
@@ -1302,8 +1312,10 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         groups = assignment.value_counts()
         groups = groups[groups != n_cells].to_dict()
         if len(groups):
-            logg.warning(
-                f"The following terminal states have different number of cells than requested ({n_cells}): {groups}"
+            logger.warning(
+                "The following terminal states have different number of cells than requested (%s): %s",
+                n_cells,
+                groups,
             )
 
         self._write_macrostates(
@@ -1314,7 +1326,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             params=params,
         )
 
-    @logger
+    @log_writer
     @shadow
     def _write_macrostates(
         self,
@@ -1376,7 +1388,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             "    Finish"
         )
 
-    @logger
+    @log_writer
     @shadow
     def _write_states(
         self,

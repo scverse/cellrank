@@ -1,4 +1,5 @@
 import enum
+import logging
 import os
 import pathlib
 from typing import Any, Literal
@@ -6,10 +7,10 @@ from typing import Any, Literal
 from anndata import AnnData
 from scanpy import read
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
 
+logger = logging.getLogger(__name__)
 __all__ = [
     "pancreas",
     "lung",
@@ -49,17 +50,17 @@ def _load_dataset_from_url(
         fpath += ".h5ad"
 
     if os.path.isfile(fpath):
-        logg.debug(f"Loading dataset from `{fpath!r}`")
+        logger.debug("Loading dataset from %r", fpath)
     else:
-        logg.debug(f"Downloading dataset from `{url!r}` as `{fpath!r}`")
+        logger.debug("Downloading dataset from %r as %r", url, fpath)
 
     dirname, _ = os.path.split(fpath)
     try:
         if not os.path.isdir(dirname):
-            logg.debug(f"Creating directory `{dirname!r}`")
+            logger.debug("Creating directory %r", dirname)
             os.makedirs(dirname, exist_ok=True)
     except OSError as e:
-        logg.debug(f"Unable to create directory `{dirname!r}`. Reason `{e}`")
+        logger.debug("Unable to create directory %r. Reason `%s`", dirname, e)
 
     kwargs.setdefault("sparse", True)
     kwargs.setdefault("cache", True)

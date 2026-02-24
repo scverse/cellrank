@@ -1,10 +1,12 @@
 from importlib import metadata
 
-from cellrank import datasets, estimators, kernels, logging, models, pl
+from cellrank import datasets, estimators, kernels, models, pl
+from cellrank._settings import CellRankConfig, _setup_logger, settings
 from cellrank._utils._lineage import Lineage
-from cellrank.settings import settings
 
-__all__ = ["datasets", "estimators", "kernels", "logging", "models", "pl", "Lineage", "settings"]
+_setup_logger()
+
+__all__ = ["datasets", "estimators", "kernels", "models", "pl", "CellRankConfig", "Lineage", "settings"]
 
 try:
     md = metadata.metadata(__name__)

@@ -3,6 +3,7 @@ import enum
 import functools
 import inspect
 import itertools
+import logging
 import pathlib
 import types
 from collections.abc import Callable, Iterable, Mapping
@@ -21,7 +22,6 @@ from pandas.api.types import infer_dtype
 from scipy.spatial.distance import jensenshannon
 from sklearn.feature_selection import mutual_info_regression
 
-from cellrank import logging as logg
 from cellrank._utils._colors import (
     _compute_mean_color,
     _create_categorical_colors,
@@ -31,6 +31,7 @@ from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._key import Key
 
+logger = logging.getLogger(__name__)
 __all__ = ["Lineage", "LineageView"]
 
 ColorLike = TypeVar("ColorLike")
@@ -714,12 +715,12 @@ class Lineage(np.ndarray, metaclass=LineageMeta):
 
         # check input parameters
         if return_weights and mode == Reduction.SCALE:
-            logg.warning(f"If `mode={mode!r}`, no weights are computed. Returning `None`")
+            logger.warning("If `mode=%r`, no weights are computed. Returning `None`", mode)
 
         reference = self[:, keys]
         rest = [k for k in self.names if all(k not in rk for rk in reference.names)]
         if not rest:
-            logg.warning(
+            logger.warning(
                 "Unable to perform reduction because all keys have been selected. Returning combined object only"
             )
             return (reference.copy(), None) if return_weights else reference.copy()
@@ -757,7 +758,7 @@ class Lineage(np.ndarray, metaclass=LineageMeta):
                 raise ValueError("Weights matrix contains negative elements.")
 
             if (weights == 0).any():
-                logg.warning("Weights matrix contains exact zeros.")
+                logger.warning("Weights matrix contains exact zeros.")
 
             # normalize the weights to row-sum to one
             if normalize_weights == NormWeights.SCALE:
@@ -851,24 +852,29 @@ class Lineage(np.ndarray, metaclass=LineageMeta):
 
         states = adata.obs.get(nkey, None)
         if states is None:
-            logg.warning(f"Unable to find states in `adata.obs[{nkey!r}]`. Using default names")
+            logger.warning("Unable to find states in `adata.obs[%r]`. Using default names", nkey)
         elif not isinstance(states.dtype, pd.CategoricalDtype):
-            logg.warning(
-                f"Expected `adata.obs[{key!r}]` to be `categorical`, "
-                f"found `{infer_dtype(adata.obs[nkey])}`. Using default names"
+            logger.warning(
+                "Expected `adata.obs[%r]` to be `categorical`, found `%s`. Using default names",
+                key,
+                infer_dtype(adata.obs[nkey]),
             )
         else:
             states = list(states.cat.categories)
             if len(states) != data.shape[1]:
-                logg.warning(f"Expected to find `{data.shape[1]}` names, found `{len(states)}`. Using default names")
+                logger.warning(
+                    "Expected to find `%s` names, found `%s`. Using default names",
+                    data.shape[1],
+                    len(states),
+                )
         if states is None or len(states) != data.shape[1]:
             states = [str(i) for i in range(data.shape[1])]
 
         colors = adata.uns.get(ckey, None)
         if colors is None:
-            logg.warning(f"Unable to find colors in `adata.uns[{ckey!r}]`. Using default colors")
+            logger.warning("Unable to find colors in `adata.uns[%r]`. Using default colors", ckey)
         elif len(colors) != data.shape[1]:
-            logg.warning(f"Expected to find `{data.shape[1]}` colors, found `{len(colors)}`. Using default colors")
+            logger.warning("Expected to find `%s` colors, found `%s`. Using default colors", data.shape[1], len(colors))
             colors = None
 
         return Lineage(data, names=states, colors=colors)
@@ -1118,7 +1124,7 @@ def _remove_zero_rows(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndar
     bool_b = (b == 0).any(axis=1)
     mask = ~np.logical_or(bool_a, bool_b)
 
-    logg.warning(f"Removed {a.shape[0] - np.sum(mask)} rows because they contained zeros")
+    logger.warning("Removed %s rows because they contained zeros", a.shape[0] - np.sum(mask))
 
     return a[mask, :], b[mask, :]
 

@@ -1,12 +1,12 @@
 import contextlib
+import logging
 import pathlib
 import pickle
 from typing import Protocol
 
 from anndata import AnnData
 
-from cellrank import logging as logg
-
+logger = logging.getLogger(__name__)
 __all__ = ["IOMixin"]
 
 
@@ -56,7 +56,7 @@ class IOMixin:
         -------
         Nothing, just writes itself to a file.
         """
-        logg.info(f"Writing `{self}` to `{fname}`")
+        logger.info("Writing `%s` to `%s`", self, fname)
 
         if write_adata:
             with open(fname, "wb") as fout:
@@ -89,7 +89,7 @@ class IOMixin:
         if hasattr(obj, "adata"):
             if isinstance(obj.adata, AnnData):
                 if adata is not None:
-                    logg.warning("Ignoring supplied `adata` object because it is already present")
+                    logger.warning("Ignoring supplied `adata` object because it is already present")
                 return obj
 
             if not isinstance(adata, AnnData):

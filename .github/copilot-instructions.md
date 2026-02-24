@@ -114,16 +114,17 @@ Six main plotting functions: `aggregate_fate_probabilities`, `circular_projectio
 - **`_parallelize.py`** — joblib-based parallelization helper
 - **`_key.py`** — standardized AnnData key naming (e.g., `terminal_states_fwd`)
 
-### `logging/` — Custom Logger
+### Logging
 
-Legacy scanpy-style logger (`_RootLogger`) with custom `HINT` level, timing
-support, and `settings.verbosity` integration. Used as:
+Stdlib `logging` with `rich.logging.RichHandler`. The `"cellrank"` root logger
+is configured in `_settings.py`. Modules use:
 ```python
-from cellrank import logging as logg
+import logging
 
-logg.info("Computing transition matrix", time=start)
+logger = logging.getLogger(__name__)
+logger.info("Computing %d macrostates", n_states)
 ```
-35+ files use this pattern — don't refactor it.
+Use lazy `%` formatting (not f-strings) in all logger calls.
 
 ### `datasets.py` — Example Datasets
 
@@ -177,7 +178,7 @@ python -m pytest tests/test_kernels.py -v -x  # quick iteration
 - **Shadow AnnData**: estimators maintain an internal AnnData copy for
   serialization; `to_adata()` exports it
 - **Bidirectional kernels**: `~kernel` flips direction (forward ↔ backward)
-- **Logging**: Use `from cellrank import logging as logg` (not stdlib logging)
+- **Logging**: Use `logging.getLogger(__name__)` with lazy `%` formatting
 - **Key naming**: Use helpers in `_utils/_key.py` for AnnData keys
 
 ## Optional Dependencies

@@ -1,4 +1,5 @@
 import enum
+import logging
 import pathlib
 import types
 from collections.abc import Callable, Mapping, Sequence
@@ -13,7 +14,6 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from sklearn.metrics import pairwise_distances
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
@@ -22,6 +22,7 @@ from cellrank._utils._lineage import PrimingDegree
 from cellrank._utils._utils import _check_collection, _unique_order_preserving, save_fig
 from cellrank.pl._utils import _held_karp
 
+logger = logging.getLogger(__name__)
 __all__ = ["circular_projection"]
 
 
@@ -201,11 +202,11 @@ def circular_projection(
 
     if lineage_order is None:
         lineage_order = LineageOrder.OPTIMAL if 3 < probs.nlin <= 20 else LineageOrder.DEFAULT
-        logg.debug(f"Set ordering to `{lineage_order}`")
+        logger.debug("Set ordering to `%s`", lineage_order)
     lineage_order = LineageOrder(lineage_order)
 
     if lineage_order == LineageOrder.OPTIMAL:
-        logg.info(f"Solving TSP for `{probs.nlin}` states")
+        logger.info("Solving TSP for `%s` states", probs.nlin)
         _, order = _get_optimal_order(X, metric=metric)
     else:
         order = np.arange(probs.nlin)
@@ -241,7 +242,7 @@ def circular_projection(
         set_lognorm, colorbar = False, kwargs.pop("colorbar", True)
         try:
             _ = PrimingDegree(k)
-            logg.debug(f"Calculating priming degree using `method={k}`")
+            logger.debug("Calculating priming degree using `method=%s`", k)
             val = probs.priming_degree(method=k, early_cells=early_cells)
             k = f"{lineage_key}_{k}"
             adata.obs[k] = val

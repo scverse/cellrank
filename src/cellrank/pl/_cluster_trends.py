@@ -1,3 +1,4 @@
+import logging
 import pathlib
 import types
 from collections.abc import Sequence
@@ -11,7 +12,6 @@ from matplotlib.colors import ListedColormap, is_color_like
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from sklearn.preprocessing import StandardScaler
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
@@ -34,6 +34,7 @@ from cellrank.pl._utils import (
     _time_range_type,
 )
 
+logger = logging.getLogger(__name__)
 __all__ = ["cluster_trends"]
 
 
@@ -216,7 +217,7 @@ def cluster_trends(
         trends = np.vstack([model[lineage].y_test for model in models.values()]).T
 
         if norm:
-            logg.debug("Normalizing trends")
+            logger.debug("Normalizing trends")
             _ = StandardScaler(copy=False).fit_transform(trends)
 
         mod = next(mod for tmp in all_models.values() for mod in tmp.values())
@@ -249,11 +250,11 @@ def cluster_trends(
         clustering_kwargs.setdefault("directed", False)
         sc.tl.leiden(trends, **clustering_kwargs)
 
-        logg.info(f"Saving data to `adata.uns[{key!r}]`")
+        logger.info("Saving data to `adata.uns[%r]`", key)
         adata.uns[key] = trends
     else:
         all_models = None
-        logg.info(f"Loading data from `adata.uns[{key!r}]`")
+        logger.info("Loading data from `adata.uns[%r]`", key)
         trends = adata.uns[key]
         x_test = trends.var["x_test"]
 

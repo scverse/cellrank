@@ -1,5 +1,6 @@
 import collections
 import enum
+import logging
 import math
 import os
 import pathlib
@@ -18,7 +19,6 @@ from mpl_toolkits.axes_grid1 import Divider, Size
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.ndimage.filters import convolve
 
-from cellrank import logging as logg
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t, ModeEnum
@@ -43,6 +43,7 @@ from cellrank.pl._utils import (
     _time_range_type,
 )
 
+logger = logging.getLogger(__name__)
 __all__ = ["heatmap"]
 
 _N_XTICKS = 10
@@ -517,7 +518,7 @@ def heatmap(
 
     xlabel = time_key if xlabel is None else xlabel
 
-    logg.debug(f"Plotting `{mode!r}` heatmap")
+    logger.debug("Plotting %r heatmap", mode)
     if gene_order is not None and mode != HeatmapMode.LINEAGES:
         gene_order = [gene for gene in gene_order if gene in genes]
 

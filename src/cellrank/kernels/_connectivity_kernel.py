@@ -1,10 +1,13 @@
+import logging
+import time as _time
+
 from anndata import AnnData
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank.kernels._base_kernel import UnidirectionalKernel
 from cellrank.kernels.mixins import ConnectivityMixin
 
+logger = logging.getLogger(__name__)
 __all__ = ["ConnectivityKernel"]
 
 
@@ -61,8 +64,9 @@ class ConnectivityKernel(ConnectivityMixin, UnidirectionalKernel):
         Returns self and updates :attr:`transition_matrix` and :attr:`params`.
         """
         # fmt: off
-        start = logg.info(f"Computing transition matrix based on `adata.obsp[{self._conn_key!r}]`")
-        if self._reuse_cache({"dnorm": density_normalize, "key": self._conn_key}, time=start):
+        _start = _time.perf_counter()
+        logger.info("Computing transition matrix based on adata.obsp[%r]", self._conn_key)
+        if self._reuse_cache({"dnorm": density_normalize, "key": self._conn_key}):
             return self
 
         conn = self.connectivities
@@ -70,7 +74,7 @@ class ConnectivityKernel(ConnectivityMixin, UnidirectionalKernel):
             conn = self._density_normalize(conn)
 
         self.transition_matrix = conn
-        logg.info("    Finish", time=start)
+        logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
         # fmt: on
 
         return self

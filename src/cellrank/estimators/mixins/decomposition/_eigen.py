@@ -1,4 +1,6 @@
+import logging
 import pathlib
+import time as _time
 import types
 from collections.abc import Mapping
 from typing import Any, Literal
@@ -9,12 +11,12 @@ import scipy.sparse as sp
 from anndata import AnnData
 from matplotlib.ticker import FormatStrFormatter, MultipleLocator
 
-from cellrank import logging as logg
 from cellrank._utils._docs import d
 from cellrank._utils._key import Key
 from cellrank._utils._utils import _eigengap, save_fig
-from cellrank.estimators.mixins._utils import BaseProtocol, SafeGetter, logger, shadow
+from cellrank.estimators.mixins._utils import BaseProtocol, SafeGetter, log_writer, shadow
 
+logger = logging.getLogger(__name__)
 __all__ = ["EigenMixin"]
 
 EPS = np.finfo(np.float64).eps
@@ -91,10 +93,11 @@ class EigenMixin:
         def get_top_k_evals() -> np.ndarray:
             return D[np.flip(np.argsort(D.real))][:k]
 
-        start = logg.info("Computing eigendecomposition of the transition matrix")
+        _start = _time.perf_counter()
+        logger.info("Computing eigendecomposition of the transition matrix")
 
         if sp.issparse(self.transition_matrix):
-            logg.debug(f"Computing top `{k}` eigenvalues of a sparse matrix")
+            logger.debug("Computing top `%s` eigenvalues of a sparse matrix", k)
             D, V_l = sp.linalg.eigs(self.transition_matrix.T, k=k, which=which, ncv=ncv)
             if only_evals:
                 self._write_eigendecomposition(
@@ -103,12 +106,12 @@ class EigenMixin:
                         "eigengap": _eigengap(get_top_k_evals().real, alpha),
                         "params": {"which": which, "k": k, "alpha": alpha},
                     },
-                    time=start,
+                    time=_start,
                 )
                 return
             _, V_r = sp.linalg.eigs(self.transition_matrix, k=k, which=which, ncv=ncv)
         else:
-            logg.warning("This transition matrix is not sparse, computing full eigendecomposition")
+            logger.warning("This transition matrix is not sparse, computing full eigendecomposition")
             D, V_l = np.linalg.eig(self.transition_matrix.T)
             if only_evals:
                 self._write_eigendecomposition(
@@ -117,13 +120,13 @@ class EigenMixin:
                         "eigengap": _eigengap(D.real, alpha),
                         "params": {"which": which, "k": k, "alpha": alpha},
                     },
-                    time=start,
+                    time=_start,
                 )
                 return
             _, V_r = np.linalg.eig(self.transition_matrix)
 
         # Sort the eigenvalues and eigenvectors and take the real part
-        logg.debug("Sorting eigenvalues by their real part")
+        logger.debug("Sorting eigenvalues by their real part")
         p = np.flip(np.argsort(D.real))
         D, V_l, V_r = D[p], V_l[:, p], V_r[:, p]
         e_gap = _eigengap(D.real, alpha)
@@ -140,7 +143,7 @@ class EigenMixin:
                 "eigengap": e_gap,
                 "params": {"which": which, "k": k, "alpha": alpha},
             },
-            time=start,
+            time=_start,
         )
         return self
 
@@ -341,7 +344,7 @@ class EigenMixin:
 
         return fig
 
-    @logger
+    @log_writer
     @shadow
     def _write_eigendecomposition(
         self: EigenProtocol,
