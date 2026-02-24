@@ -56,11 +56,11 @@ Finally, if you are following the CellRank Protocol {cite}`weiler:25`, please ci
 
 ```bibtex
 @article{weiler:25,
-    author    = {Weiler, Philipp and Lange, Marius and Klein, Michal and Pe'er, Dana and Theis, Fabian J.},
-    doi       = {10.1038/s41596-024-01108-4},
+    author    = {Weiler, Philipp and Theis, Fabian J.},
+    doi       = {10.1038/s41596-025-01314-w},
     journal   = {Nature Protocols},
-    title     = {Unified fate mapping in multiview single-cell data},
-    year      = {2025},
+    title     = {CellRank: consistent and data view agnostic fate mapping for single-cell genomics},
+    year      = {2026},
 }
 ```
 
@@ -91,13 +91,13 @@ See {doc}`../notebooks/tutorials/kernels/300_pseudotime`,
 {doc}`../notebooks/tutorials/kernels/400_cytotrace`, and
 {doc}`../notebooks/tutorials/kernels/500_real_time` for kernel-specific tutorials.
 
-### CellRank Protocol — *Nature Protocols*, 2025
+### CellRank Protocol — *Nature Protocols*, 2026
 
 A step-by-step practical guide for applying CellRank to single-cell data. The protocol covers
 the full workflow from data preprocessing to fate probability computation and downstream analysis,
 making it the ideal starting point for new users.
 
-Weiler, P. *et al.* [Unified fate mapping in multiview single-cell data.](https://doi.org/10.1038/s41596-024-01108-4) *Nat. Protoc.* (2025).
+Weiler, P. & Theis, F. J. [CellRank: consistent and data view agnostic fate mapping for single-cell genomics.](https://doi.org/10.1038/s41596-025-01314-w) *Nat. Protoc.* (2026).
 
 See the [protocol GitHub repository](https://github.com/theislab/cellrank_protocol) for all
 accompanying notebooks and data.
