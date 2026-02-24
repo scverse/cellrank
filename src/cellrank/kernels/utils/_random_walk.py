@@ -8,18 +8,18 @@ from typing import Any, Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import scipy.sparse as sp
-import scvelo as scv
 from anndata import AnnData
 from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap, to_hex
 from pandas.api.types import infer_dtype
-from scvelo.plotting.utils import default_size, plot_outline
 
 from cellrank._utils._docs import d
 from cellrank._utils._parallelize import parallelize
 from cellrank._utils._utils import save_fig
 from cellrank.kernels._utils import _get_basis
+from cellrank.kernels.utils._plot_utils import _default_size, _plot_outline
 
 logger = logging.getLogger(__name__)
 __all__ = ["RandomWalk"]
@@ -217,7 +217,7 @@ class RandomWalk:
             Position of the legend describing start- and endpoints.
         %(plotting)s
         kwargs
-            Keyword arguments for :func:`~scvelo.pl.scatter`.
+            Keyword arguments for :func:`~scanpy.pl.embedding`.
 
         Returns
         -------
@@ -236,7 +236,7 @@ class RandomWalk:
             )
 
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-        scv.pl.scatter(self._adata, basis=basis, show=False, ax=ax, **kwargs)
+        sc.pl.embedding(self._adata, basis=basis, show=False, ax=ax, **kwargs)
 
         logger.info("Plotting random walks")
         for sim in sims:
@@ -257,12 +257,12 @@ class RandomWalk:
 
         for ix in [0, -1]:
             ixs = [sim[ix] for sim in sims]
-            plot_outline(
+            _plot_outline(
                 x=emb[ixs][:, 0],
                 y=emb[ixs][:, 1],
                 outline_color=("black", to_hex(cmap(float(abs(ix))))),
                 kwargs={
-                    "s": kwargs.get("size", default_size(self._adata)) * 1.1,
+                    "s": kwargs.get("size", _default_size(self._adata)) * 1.1,
                     "alpha": 0.9,
                 },
                 ax=ax,
