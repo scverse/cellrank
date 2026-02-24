@@ -115,6 +115,15 @@ def aggregate_fate_probabilities(
     Returns
     -------
     %(just_plots)s
+
+    Notes
+    -----
+    For ``mode = 'paga_pie'``, directed edges are shown only when
+    ``adata.uns['paga']['transitions_confidence']`` is present. This key is
+    produced by scVelo's PAGA extension (:func:`~scvelo.tl.paga`), which
+    augments the standard scanpy PAGA graph with directed transition
+    confidences. When only scanpy's :func:`~scanpy.tl.paga` has been run,
+    edges are undirected.
     """
 
     @valuedispatch
@@ -231,7 +240,9 @@ def aggregate_fate_probabilities(
         kwargs["colorbar"] = False  # has to be disabled
         kwargs.pop("save", None)  # we will handle saving
 
-        # Only use transitions_confidence if available (requires scVelo's PAGA)
+        # Show directed edges when scVelo's PAGA has been run, which stores
+        # directed transition confidences in adata.uns["paga"]. Standard
+        # scanpy PAGA only has undirected connectivities.
         if "transitions" not in kwargs:
             paga_uns = adata.uns.get("paga", {})
             if "transitions_confidence" in paga_uns:

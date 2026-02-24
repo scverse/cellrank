@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from matplotlib import cm, colors
+from matplotlib.colors import to_rgba
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas.api.types import infer_dtype
 from sklearn.svm import SVR
@@ -1023,3 +1024,226 @@ def _get_sorted_colors(
             res.append(np.asarray(adata.obs[ck])[order])
 
     return res
+
+
+def _plot_time_scatter(
+    adata: AnnData,
+    x: np.ndarray,
+    ys: list[np.ndarray],
+    *,
+    color: list[str] | None = None,
+    title: list[str] | None = None,
+    xlabel: str = "",
+    ylabel: str = "probability",
+    cmap: str = "viridis",
+    **kwargs: Any,
+) -> None:
+    """Plot fate probability vs pseudotime as multi-panel scatter.
+
+    Parameters
+    ----------
+    adata
+        Annotated data matrix.
+    x
+        X-axis values (e.g. pseudotime).
+    ys
+        List of arrays, one per panel, for the y-axis.
+    color
+        Column names in ``adata.obs`` to color by, one per panel or one shared.
+    title
+        Title for each panel.
+    xlabel
+        X-axis label.
+    ylabel
+        Y-axis label.
+    cmap
+        Colormap for continuous color values.
+    kwargs
+        Additional keyword arguments (``figsize``, ``dpi``, ``size``, ``show``
+        are extracted; the rest is ignored).
+    """
+    n_panels = len(ys)
+    ncols = min(4, n_panels)
+    nrows = int(np.ceil(n_panels / ncols))
+
+    figsize = kwargs.pop("figsize", (6 * ncols, 4 * nrows))
+    dpi = kwargs.pop("dpi", None)
+    s = kwargs.pop("size", kwargs.pop("s", 1))
+    show = kwargs.pop("show", True)
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, dpi=dpi, squeeze=False)
+    axes_flat = axes.ravel()
+
+    color_per = None
+    if color is not None:
+        color_per = color * n_panels if len(color) == 1 else list(color)
+
+    for i, (y, ax) in enumerate(zip(ys, axes_flat)):
+        c = color_per[i] if color_per else None
+        if c is not None and c in adata.obs:
+            obs_data = adata.obs[c]
+            if isinstance(obs_data.dtype, pd.CategoricalDtype):
+                palette = adata.uns.get(f"{c}_colors", None)
+                for j, cat in enumerate(obs_data.cat.categories):
+                    mask = (obs_data == cat).values
+                    kw = {"c": palette[j]} if palette is not None and j < len(palette) else {}
+                    ax.scatter(x[mask], y[mask], s=s, alpha=0.8, label=cat, edgecolors="none", **kw)
+                ax.legend(fontsize="x-small", frameon=False)
+            else:
+                scatter = ax.scatter(x, y, c=obs_data.values, cmap=cmap, s=s, alpha=0.8, edgecolors="none")
+                plt.colorbar(scatter, ax=ax)
+        else:
+            scatter = ax.scatter(x, y, c=y, cmap=cmap, s=s, alpha=0.8, edgecolors="none")
+            plt.colorbar(scatter, ax=ax)
+
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        if title and i < len(title):
+            ax.set_title(title[i])
+
+    for j in range(n_panels, len(axes_flat)):
+        axes_flat[j].remove()
+
+    plt.tight_layout()
+    if show is not False:
+        plt.show()
+
+
+def _plot_color_gradients(
+    adata: AnnData,
+    data: Any,
+    *,
+    basis: str = "umap",
+    title: list[str] | None = None,
+    **kwargs: Any,
+) -> None:
+    """Plot fate probabilities as overlapping color gradients on an embedding.
+
+    Each lineage is drawn as a separate scatter layer whose per-cell alpha
+    is proportional to the fate probability.  Layers are stacked so that
+    high-probability cells appear on top.
+
+    Parameters
+    ----------
+    adata
+        Annotated data matrix.
+    data
+        A :class:`~cellrank._utils._lineage.Lineage` with fate probabilities.
+    basis
+        Key in ``adata.obsm`` for the 2-D coordinates.
+    title
+        Plot title (list with a single element or string).
+    kwargs
+        Additional keyword arguments (``figsize``, ``dpi``, ``size``,
+        ``show`` are extracted; the rest is ignored).
+    """
+    coords = adata.obsm[f"X_{basis}"]
+
+    figsize = kwargs.pop("figsize", None)
+    dpi = kwargs.pop("dpi", None)
+    s = kwargs.pop("size", kwargs.pop("s", None))
+    show = kwargs.pop("show", True)
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+    # Background: all cells in light grey
+    ax.scatter(coords[:, 0], coords[:, 1], c="lightgrey", s=s or 1, edgecolors="none")
+
+    handles = []
+    for name, lineage_color in zip(data.names, data.colors):
+        col = data[:, name].X.ravel()
+        rgba = to_rgba(lineage_color)
+
+        # Normalize values to [0, 1] for alpha blending
+        vmin, vmax = np.nanmin(col), np.nanmax(col)
+        norm = (col - vmin) / (vmax - vmin) if vmax > vmin else np.zeros_like(col)
+
+        # Per-cell RGBA with alpha proportional to probability
+        cell_colors = np.broadcast_to(np.array(rgba), (len(col), 4)).copy()
+        cell_colors[:, 3] = norm
+
+        # Sort by value so high-probability cells appear on top
+        order = np.argsort(norm)
+        ax.scatter(
+            coords[order, 0],
+            coords[order, 1],
+            c=cell_colors[order],
+            s=s or 1,
+            edgecolors="none",
+        )
+        handles.append(
+            plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=lineage_color, label=name, markersize=8)
+        )
+
+    ax.legend(handles=handles, frameon=False)
+    if title:
+        ax.set_title(title[0] if isinstance(title, list) else title)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    if show is not False:
+        plt.show()
+
+
+def _add_outline_to_groups(
+    ax: mpl.axes.Axes,
+    coords: np.ndarray,
+    groups: Sequence[str],
+    obs_series: pd.Series,
+    *,
+    size: float = 20,
+    outline_width: tuple[float, float] = (0.3, 0.05),
+    outline_color: tuple[str, str] = ("black", "white"),
+) -> None:
+    """Draw a three-layer outline around cells belonging to *groups*.
+
+    Mimics scVelo's group-specific ``add_outline`` behaviour: for each cell in
+    the selected groups, three overlapping scatter dots are drawn (background →
+    gap → foreground) so that only those cells appear highlighted.
+
+    Parameters
+    ----------
+    ax
+        Axes to draw on.
+    coords
+        ``(n_cells, 2)`` array of 2-D positions.
+    groups
+        Category names whose cells should be outlined.
+    obs_series
+        Categorical ``pd.Series`` (same length as *coords*).
+    size
+        Scatter dot size used in the main plot.
+    outline_width
+        ``(bg_frac, gap_frac)`` relative to dot radius.
+    outline_color
+        ``(bg_color, gap_color)`` for the two extra layers.
+    """
+    point = np.sqrt(size)
+    bg_frac, gap_frac = outline_width
+    bg_size = (2 * point * bg_frac + np.sqrt(size)) ** 2
+    gap_size = (2 * point * gap_frac + point) ** 2
+
+    mask = obs_series.isin(groups).values
+    if not mask.any():
+        return
+
+    zorder = ax.collections[-1].get_zorder() if ax.collections else 0
+
+    ax.scatter(
+        coords[mask, 0],
+        coords[mask, 1],
+        s=bg_size,
+        c=outline_color[0],
+        edgecolors="none",
+        zorder=zorder - 2,
+    )
+    ax.scatter(
+        coords[mask, 0],
+        coords[mask, 1],
+        s=gap_size,
+        c=outline_color[1],
+        edgecolors="none",
+        zorder=zorder - 1,
+    )

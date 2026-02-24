@@ -4,13 +4,12 @@ import types
 from collections.abc import Sequence
 from typing import Any, Literal
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
 import scipy.sparse as sp
 from anndata import AnnData
-from matplotlib.colors import to_hex, to_rgba
+from matplotlib.colors import to_hex
 from pandas.api.types import infer_dtype
 
 from cellrank._utils._colors import (
@@ -36,135 +35,10 @@ from cellrank.estimators.mixins._utils import (
     shadow,
 )
 from cellrank.kernels._base_kernel import KernelExpression
+from cellrank.pl._utils import _add_outline_to_groups, _plot_color_gradients, _plot_time_scatter
 
 logger = logging.getLogger(__name__)
 __all__ = ["TermStatesEstimator"]
-
-
-def _plot_time_scatter(
-    adata: AnnData,
-    x: np.ndarray,
-    ys: list[np.ndarray],
-    *,
-    color: list[str] | None = None,
-    title: list[str] | None = None,
-    xlabel: str = "",
-    ylabel: str = "probability",
-    cmap: str = "viridis",
-    **kwargs: Any,
-) -> None:
-    """Plot fate probability vs pseudotime as multi-panel scatter."""
-    n_panels = len(ys)
-    ncols = min(4, n_panels)
-    nrows = int(np.ceil(n_panels / ncols))
-
-    figsize = kwargs.pop("figsize", (6 * ncols, 4 * nrows))
-    dpi = kwargs.pop("dpi", None)
-    s = kwargs.pop("size", kwargs.pop("s", 1))
-    show = kwargs.pop("show", True)
-    kwargs.pop("legend_loc", None)
-    kwargs.pop("perc", None)
-    kwargs.pop("save", None)
-
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, dpi=dpi, squeeze=False)
-    axes_flat = axes.ravel()
-
-    color_per = None
-    if color is not None:
-        color_per = color * n_panels if len(color) == 1 else list(color)
-
-    for i, (y, ax) in enumerate(zip(ys, axes_flat)):
-        c = color_per[i] if color_per else None
-        if c is not None and c in adata.obs:
-            obs_data = adata.obs[c]
-            if isinstance(obs_data.dtype, pd.CategoricalDtype):
-                palette = adata.uns.get(f"{c}_colors", None)
-                for j, cat in enumerate(obs_data.cat.categories):
-                    mask = (obs_data == cat).values
-                    kw = {"c": palette[j]} if palette is not None and j < len(palette) else {}
-                    ax.scatter(x[mask], y[mask], s=s, alpha=0.8, label=cat, edgecolors="none", **kw)
-                ax.legend(fontsize="x-small", frameon=False)
-            else:
-                scatter = ax.scatter(x, y, c=obs_data.values, cmap=cmap, s=s, alpha=0.8, edgecolors="none")
-                plt.colorbar(scatter, ax=ax)
-        else:
-            scatter = ax.scatter(x, y, c=y, cmap=cmap, s=s, alpha=0.8, edgecolors="none")
-            plt.colorbar(scatter, ax=ax)
-
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        if title and i < len(title):
-            ax.set_title(title[i])
-
-    for j in range(n_panels, len(axes_flat)):
-        axes_flat[j].remove()
-
-    plt.tight_layout()
-    if show is not False:
-        plt.show()
-
-
-def _plot_color_gradients(
-    adata: AnnData,
-    data: "Lineage",
-    *,
-    basis: str = "umap",
-    title: list[str] | None = None,
-    **kwargs: Any,
-) -> None:
-    """Plot fate probabilities as overlapping color gradients on an embedding."""
-    coords = adata.obsm[f"X_{basis}"]
-
-    figsize = kwargs.pop("figsize", None)
-    dpi = kwargs.pop("dpi", None)
-    s = kwargs.pop("size", kwargs.pop("s", None))
-    show = kwargs.pop("show", True)
-    kwargs.pop("legend_loc", None)
-    kwargs.pop("save", None)
-    kwargs.pop("perc", None)
-    kwargs.pop("cmap", None)
-
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-
-    # Background: all cells in light grey
-    ax.scatter(coords[:, 0], coords[:, 1], c="lightgrey", s=s or 1, edgecolors="none")
-
-    handles = []
-    for name, lineage_color in zip(data.names, data.colors):
-        col = data[:, name].X.ravel()
-        rgba = to_rgba(lineage_color)
-
-        # Normalize values to [0, 1] for alpha blending
-        vmin, vmax = np.nanmin(col), np.nanmax(col)
-        norm = (col - vmin) / (vmax - vmin) if vmax > vmin else np.zeros_like(col)
-
-        # Per-cell RGBA with alpha proportional to probability
-        cell_colors = np.broadcast_to(np.array(rgba), (len(col), 4)).copy()
-        cell_colors[:, 3] = norm
-
-        # Sort by value so high-probability cells appear on top
-        order = np.argsort(norm)
-        ax.scatter(
-            coords[order, 0],
-            coords[order, 1],
-            c=cell_colors[order],
-            s=s or 1,
-            edgecolors="none",
-        )
-        handles.append(
-            plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=lineage_color, label=name, markersize=8)
-        )
-
-    ax.legend(handles=handles, frameon=False)
-    if title:
-        ax.set_title(title[0] if isinstance(title, list) else title)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-
-    if show is not False:
-        plt.show()
 
 
 @d.dedent
@@ -563,13 +437,14 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         kwargs.setdefault("legend_loc", "on data")
         kwargs.pop("color_map", None)
         kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
-        kwargs.pop("perc", None)  # scVelo-specific, use vmin/vmax instead
         kwargs["cmap"] = cmap
         basis = kwargs.pop("basis", "umap")
+        size = kwargs.get("size", 120_000 / self.adata.n_obs)
 
         # fmt: off
         with RandomKeys(self.adata, n=1 if same_plot else len(states), where="obs") as keys:
             if same_plot:
+                outline = _data.cat.categories.to_list()
                 _data = _data.cat.add_categories(["nan"]).fillna("nan")
                 states.append("nan")
                 color_mapper["nan"] = "#dedede"
@@ -577,6 +452,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                 self.adata.uns[f"{keys[0]}_colors"] = [color_mapper[name] for name in states]
                 title = _title if title is None else title
             else:
+                outline = None
                 for key, cat in zip(keys, states):
                     self.adata.obs[key] = _data.cat.set_categories([cat])
                     self.adata.uns[f"{key}_colors"] = [color_mapper[cat]]
@@ -585,13 +461,25 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             if isinstance(title, str):
                 title = [title]
 
-            sc.pl.embedding(
+            axes = sc.pl.embedding(
                 self.adata,
                 basis=basis,
                 color=color + keys,
                 title=color + title,
+                show=False,
+                return_fig=False,
                 **kwargs,
             )
+
+            # Draw group-specific outlines (scVelo's add_outline with group names)
+            if outline is not None:
+                coords = self.adata.obsm[f"X_{basis}"]
+                axes_list = [axes] if not isinstance(axes, list | np.ndarray) else list(np.ravel(axes))
+                for ax, key in zip(axes_list[len(color):], keys):
+                    if key in self.adata.obs:
+                        _add_outline_to_groups(
+                            ax, coords, outline, self.adata.obs[key], size=size,
+                        )
         # fmt: on
 
     def _plot_continuous(
@@ -616,7 +504,6 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             states = _data.names
         if not len(states):
             raise ValueError("No lineages have been selected.")
-        is_singleton = _data.shape[1] == 1
         _data = _data[states].copy()
 
         if mode == "time" and same_plot:
@@ -664,13 +551,6 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         elif mode == PlotMode.EMBEDDING:
             kwargs.setdefault("legend_loc", "on data")
             kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
-            perc = kwargs.pop("perc", [0, 95])  # scVelo-specific; convert to vmin/vmax
-
-            # Handle singleton perc -> vmin/vmax
-            if is_singleton and not np.allclose(_data_X, 1.0):
-                vals = _data_X[np.isfinite(_data_X)]
-                kwargs.setdefault("vmin", float(np.percentile(vals, perc[0])))
-                kwargs.setdefault("vmax", float(np.percentile(vals, perc[1])))
 
             if same_plot:
                 if color:
