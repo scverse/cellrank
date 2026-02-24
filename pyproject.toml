@@ -88,6 +88,7 @@ test = [
   "pytest-cov>=6",
   "pytest-mock>=3.14",
   "pytest-xdist",
+  "scvelo>=0.3",
   "zarr<3",
 ]
 docs = [
