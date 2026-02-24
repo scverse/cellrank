@@ -7,13 +7,13 @@ from typing import Any, Literal
 import numpy as np
 import scipy.sparse as sp
 from anndata import AnnData
-from scvelo.preprocessing.moments import get_moments
 
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
 from cellrank.kernels._base_kernel import BidirectionalKernel
 from cellrank.kernels.mixins import ConnectivityMixin
 from cellrank.kernels.utils import Deterministic, MonteCarlo, Stochastic
+from cellrank.kernels.utils._moments import _knn_moments, _row_normalize_connectivities
 from cellrank.kernels.utils._similarity import Similarity, SimilarityABC
 from cellrank.kernels.utils._velocity_model import BackwardMode, VelocityModel
 
@@ -103,10 +103,10 @@ class VelocityKernel(ConnectivityMixin, BidirectionalKernel):
         if np.any(nans):
             self._xdata = self._xdata[:, ~nans]
             self._vdata = self._vdata[:, ~nans]
-        # fmt: off
-        self._vexp = get_moments(self.adata, self._vdata, second_order=False).astype(np.float64, copy=False)
-        self._vvar = get_moments(self.adata, self._vdata, second_order=True).astype(np.float64, copy=False)
-        # fmt: on
+        W = _row_normalize_connectivities(self.adata)
+        self._vexp, self._vvar = _knn_moments(W, self._vdata)
+        self._vexp = self._vexp.astype(np.float64, copy=False)
+        self._vvar = self._vvar.astype(np.float64, copy=False)
 
     # TODO(michalk8): remove the docrep in 2.0
     @inject_docs(m=VelocityModel, b=BackwardMode, s=Similarity)  # don't swap the order

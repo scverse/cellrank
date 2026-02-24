@@ -5,12 +5,12 @@ from typing import Any
 
 import numpy as np
 import scipy.sparse as sp
-import scvelo as scv
-from scvelo.tools.velocity_embedding import quiver_autoscale
 
 from cellrank._utils._docs import d
+from cellrank._utils._import_utils import _check_module_importable
 from cellrank._utils._key import Key
 from cellrank.kernels._utils import _get_basis
+from cellrank.kernels.utils._plot_utils import _quiver_autoscale
 
 logger = logging.getLogger(__name__)
 __all__ = ["TmatProjection"]
@@ -105,7 +105,7 @@ class TmatProjection:
                     dX = np.nan_to_num(dX)
                     T_emb[row_id, :] = probs.dot(dX) - dX.sum(0) / dX.shape[0]
 
-        T_emb /= 3 * quiver_autoscale(np.nan_to_num(emb), T_emb)
+        T_emb /= 3 * _quiver_autoscale(np.nan_to_num(emb), T_emb)
 
         embs = self._kexpr.adata.uns.get(ukey, {}).get("embeddings", [])
         if self._basis not in embs:
@@ -138,6 +138,9 @@ class TmatProjection:
         -------
         %(just_plots)s
         """
+        _check_module_importable("scvelo", extra="scvelo")
+        import scvelo as scv
+
         if stream:
             return scv.pl.velocity_embedding_stream(
                 self._kexpr.adata, *args, basis=self._basis, vkey=self._key, **kwargs
