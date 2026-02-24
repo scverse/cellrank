@@ -1,12 +1,17 @@
+```{eval-rst}
 .. module:: cellrank.datasets
+```
 
-Datasets
-========
+# Datasets
+
 CellRank comes with a number of datasets that make it easy for you to get started. Our dataset API enables you to
-automatically download these datasets; see our :doc:`tutorials <../notebooks/tutorials/index>`.
+automatically download these datasets; see our {doc}`tutorials <../notebooks/tutorials/index>`.
 
+```{eval-rst}
 .. currentmodule:: cellrank
+```
 
+```{eval-rst}
 .. autosummary::
     :toctree: _autosummary/datasets
 
@@ -16,3 +21,4 @@ automatically download these datasets; see our :doc:`tutorials <../notebooks/tut
     datasets.reprogramming_schiebinger
     datasets.zebrafish
     datasets.bone_marrow
+```

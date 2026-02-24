@@ -1,69 +1,98 @@
-Developer API
-=============
+# Developer API
 
-Kernels
--------
+## Kernels
+
+```{eval-rst}
 .. autoclass:: cellrank.kernels.Kernel
     :members:
     :inherited-members:
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.UnidirectionalKernel
     :members:
     :inherited-members:
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.BidirectionalKernel
     :members:
     :inherited-members:
+```
 
-Similarity
-~~~~~~~~~~
+### Similarity
+
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.SimilarityABC
     :members:
     :special-members: __call__
     :inherited-members:
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.Cosine
     :members: __call__, hessian
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.Correlation
     :members: __call__, hessian
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.DotProduct
     :members: __call__, hessian
+```
 
-Threshold Scheme
-~~~~~~~~~~~~~~~~
+### Threshold Scheme
+
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.ThresholdSchemeABC
     :members:
     :special-members: __call__
     :inherited-members:
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.HardThresholdScheme
     :members:
     :special-members: __call__
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.SoftThresholdScheme
     :members:
     :special-members: __call__
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.CustomThresholdScheme
     :members:
     :special-members: __call__
+```
 
-Estimators
-----------
+## Estimators
+
+```{eval-rst}
 .. autoclass:: cellrank.estimators.BaseEstimator
     :members:
+```
 
+```{eval-rst}
 .. autoclass:: cellrank.estimators.TermStatesEstimator
     :members:
+```
 
-Models
-------
+## Models
+
+```{eval-rst}
 .. autoclass:: cellrank.models.BaseModel
     :members:
+```
 
-Lineage
--------
+## Lineage
+
+```{eval-rst}
 .. autoclass:: cellrank.Lineage
     :members: priming_degree, reduce, plot_pie, from_adata, X, T, view, names, colors
+```

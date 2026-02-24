@@ -1,14 +1,12 @@
-Team
-====
-..
-    TODO(michalk8): Could you format this so it looks like the scVI tools page? See https://scvi-tools.org/team#former-development-team-members
+# Team
 
-CellRank was started as a collaboration between the Theislab at Helmholtz Munich and the Pe'er lab at Memorial Sloan
+CellRank was started as a collaboration between the Theis lab at Helmholtz Munich and the Pe'er lab at Memorial Sloan
 Kettering Cancer Center (MSKCC). We are happy about every code contribution we received so far, check out the
-`contributions <https://github.com/theislab/cellrank/graphs/contributors>`_ section on GitHub for an overview.
+[contributions](https://github.com/theislab/cellrank/graphs/contributors) section on GitHub for an overview.
 
-Principal Investigators
------------------------
+## Principal Investigators
+
+```{eval-rst}
 .. grid:: auto
 
     .. grid-item-card:: :fab:`twitter` `Fabian Theis <https://twitter.com/fabian_theis>`_
@@ -24,9 +22,11 @@ Principal Investigators
         - :fas:`building-columns` `MSKCC <https://www.mskcc.org/research/ski/labs/dana-pe-er>`_
         - :fas:`graduation-cap` `Google Scholar <https://scholar.google.com/citations?user=aJOeGRoAAAAJ>`_
         - :fab:`github` `dpeerlab <https://github.com/dpeerlab>`_
+```
 
-Core Development Team
----------------------
+## Core Development Team
+
+```{eval-rst}
 .. grid:: auto
 
     .. grid-item-card:: :fab:`twitter` `Philipp Weiler <https://twitter.com/philippweiler7>`_
@@ -47,9 +47,10 @@ Core Development Team
         - :fas:`house` `mariuslange.com <https://mariuslange.com/>`_
         - :fas:`graduation-cap` `Google Scholar <https://scholar.google.com/citations?user=QrhWUR4AAAAJ>`__
         - :fab:`github` `Marius1311 <https://github.com/Marius1311>`_
+```
 
-``pyGPCCA`` Development
------------------------
-CellRank's GPCCA estimator is based on `pyGPCCA <https://github.com/msmdev/pyGPCCA>`_  for coarse-graining of
-non-reversible Markov chains :cite:`reuter:19`; check out `their documentation <https://pygpcca.readthedocs.io/>`_
+## `pyGPCCA` Development
+
+CellRank's GPCCA estimator is based on [pyGPCCA](https://github.com/msmdev/pyGPCCA) for coarse-graining of
+non-reversible Markov chains {cite}`reuter:19`; check out [their documentation](https://pygpcca.readthedocs.io/)
 to learn about contributions.

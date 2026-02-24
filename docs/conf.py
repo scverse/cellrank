@@ -7,20 +7,17 @@
 # -- Path setup --------------------------------------------------------------
 import sys
 from datetime import datetime
+from importlib.metadata import metadata
 from pathlib import Path
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-import cellrank
 
 sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 # -- Project information -----------------------------------------------------
 
-project = cellrank.__name__
-author = cellrank.__author__
-version = cellrank.__version__
+_metadata = metadata("cellrank")
+project = _metadata["Name"]
+author = _metadata["Author"]
+version = _metadata["Version"]
 copyright = f"{datetime.now():%Y}, Theislab"
 
 # -- General configuration ---------------------------------------------------
@@ -79,15 +76,17 @@ bibtex_default_style = "alpha"
 templates_path = ["_templates"]
 source_suffix = {
     ".rst": "restructuredtext",
+    ".md": "myst-nb",
     ".ipynb": "myst-nb",
 }
 
 # myst
 nb_execution_mode = "off"
 myst_enable_extensions = [
+    "amsmath",
     "colon_fence",
     "dollarmath",
-    "amsmath",
+    "substitution",
 ]
 myst_heading_anchors = 2
 
@@ -110,7 +109,7 @@ spelling_lang = "en_US"
 spelling_warning = True
 spelling_word_list_filename = "spelling_wordlist.txt"
 spelling_add_pypi_package_names = True
-spelling_exclude_patterns = ["references.rst"]
+spelling_exclude_patterns = ["references.md"]
 # see: https://pyenchant.github.io/pyenchant/api/enchant.tokenize.html
 spelling_filters = [
     "enchant.tokenize.URLFilter",

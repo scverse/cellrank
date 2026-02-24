@@ -5,7 +5,7 @@ requires = [ "hatch-vcs", "hatchling" ]
 [project]
 name = "cellrank"
 description = "CellRank: dynamics from multi-view single-cell data"
-readme = "README.rst"
+readme = "README.md"
 keywords = [
   "bio-informatics",
   "GPCCA",
