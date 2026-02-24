@@ -11,7 +11,7 @@ Install CellRank from [PyPI](https://pypi.org/project/cellrank/):
 pip install cellrank
 ```
 
-Or using [uv](https://docs.astral.sh/uv/), a fast, modern pip replacement:
+Or, using [uv](https://docs.astral.sh/uv/), a fast, modern pip replacement:
 
 ```bash
 uv pip install cellrank
@@ -26,7 +26,7 @@ pip install "cellrank[moscot]"  # moscot for optimal transport (RealTimeKernel)
 pip install "cellrank[plot]"    # additional plotting dependencies
 ```
 
-## conda / mamba
+## conda / mamba / pixi
 
 CellRank is available on [conda-forge](https://anaconda.org/conda-forge/cellrank).
 This installation method is recommended if you need [PETSc] and [SLEPc],
@@ -35,6 +35,12 @@ macrostates or fate probabilities on large datasets:
 
 ```bash
 mamba install -c conda-forge cellrank
+```
+
+Or, using [pixi](https://pixi.sh/), a fast, modern conda replacement:
+
+```bash
+pixi add cellrank
 ```
 
 To also install PETSc and SLEPc (conda-only packages):

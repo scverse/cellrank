@@ -2,7 +2,7 @@
 
 The original CellRank version (v1) {cite}`lange:22` was a framework to analyze cellular dynamics based on RNA velocity
 {cite}`manno:18,bergen:20` and gene expression similarity. Based on a
-[Markov chain](https://en.wikipedia.org/wiki/Markov_chain) formulation, it combined these two data modalities
+[Markov chain](https://brilliant.org/wiki/markov-chains/) formulation, it combined these two data modalities
 in a high-dimensional space and used the {class}`GPCCA algorithm <pygpcca.GPCCA>` {cite}`reuter:18,reuter:22`
 to compute initial and terminal states, fate probabilities, and driver genes.
 

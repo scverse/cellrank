@@ -52,6 +52,18 @@ please cite GPCCA {cite}`reuter:19` as:
 }
 ```
 
+Finally, if you are following the CellRank Protocol {cite}`weiler:25`, please cite it as:
+
+```bibtex
+@article{weiler:25,
+    author    = {Weiler, Philipp and Lange, Marius and Klein, Michal and Pe'er, Dana and Theis, Fabian J.},
+    doi       = {10.1038/s41596-024-01108-4},
+    journal   = {Nature Protocols},
+    title     = {Unified fate mapping in multiview single-cell data},
+    year      = {2025},
+}
+```
+
 ## CellRank papers
 
 ### CellRank 1 — *Nature Methods*, 2022
