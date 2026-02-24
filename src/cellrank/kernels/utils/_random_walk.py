@@ -236,6 +236,9 @@ class RandomWalk:
             )
 
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        # scVelo accepted color="none" to skip coloring; scanpy does not.
+        if kwargs.get("color") == "none":
+            kwargs.pop("color")
         sc.pl.embedding(self._adata, basis=basis, show=False, ax=ax, **kwargs)
 
         logger.info("Plotting random walks")
