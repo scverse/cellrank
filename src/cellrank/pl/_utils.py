@@ -1069,7 +1069,8 @@ def _plot_time_scatter(
     figsize = kwargs.pop("figsize", (6 * ncols, 4 * nrows))
     dpi = kwargs.pop("dpi", None)
     s = kwargs.pop("size", kwargs.pop("s", 1))
-    show = kwargs.pop("show", True)
+    show = kwargs.pop("show", None)
+    _save = kwargs.pop("save", None)
 
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, dpi=dpi, squeeze=False)
     axes_flat = axes.ravel()
@@ -1105,7 +1106,9 @@ def _plot_time_scatter(
         axes_flat[j].remove()
 
     plt.tight_layout()
-    if show is not False:
+    if _save is not None:
+        save_fig(fig, _save)
+    if show is True or (show is None and _save is None):
         plt.show()
 
 
@@ -1142,7 +1145,8 @@ def _plot_color_gradients(
     figsize = kwargs.pop("figsize", None)
     dpi = kwargs.pop("dpi", None)
     s = kwargs.pop("size", kwargs.pop("s", None))
-    show = kwargs.pop("show", True)
+    show = kwargs.pop("show", None)
+    _save = kwargs.pop("save", None)
 
     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
@@ -1183,7 +1187,9 @@ def _plot_color_gradients(
     for spine in ax.spines.values():
         spine.set_visible(False)
 
-    if show is not False:
+    if _save is not None:
+        save_fig(fig, _save)
+    if show is True or (show is None and _save is None):
         plt.show()
 
 

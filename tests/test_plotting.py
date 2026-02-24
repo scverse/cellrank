@@ -78,11 +78,10 @@ def compare(
         res = compare_images(expected_path, actual_path, tol=tol)
         assert res is None, res
 
-    # TODO: refactor (we can remove the prefix from scvelo
+    # TODO: rename tests to drop "scvelo_" prefix (legacy from when scVelo handled saving)
     def _prepare_fname(func: Callable) -> tuple[str, str]:
         fpath = f"{func.__name__.replace('test_', '')}"
-        # scvelo saves figures as pdf
-        return fpath, str(fpath[7:] + ".png" if fpath.startswith("scvelo_") else fpath)
+        return fpath, fpath
 
     def _assert_equal(fpath: str) -> None:
         if not fpath.endswith(".png"):
@@ -2269,7 +2268,7 @@ class TestGPCCA:
             arrow_length=6,
             arrow_size=6,
             dpi=DPI,
-            save=fpath,
+            save=fpath.removeprefix("scvelo_") + ".png",
         )
 
     @compare(kind="gpcca")
@@ -3348,22 +3347,22 @@ class TestProjectionEmbedding:
     def test_scvelo_connectivity_kernel_emb_stream(self, adata: AnnData, fpath: str):
         ck = ConnectivityKernel(adata)
         ck.compute_transition_matrix()
-        ck.plot_projection(dpi=DPI, save=fpath)
+        ck.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
 
     @compare()
     def test_scvelo_pseudotime_kernel_hard_threshold_emb_stream(self, adata: AnnData, fpath: str):
         ptk = PseudotimeKernel(adata, time_key="dpt_pseudotime")
         ptk.compute_transition_matrix(threshold_scheme="hard", frac_to_keep=0.3)
-        ptk.plot_projection(dpi=DPI, save=fpath)
+        ptk.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
 
     @compare()
     def test_scvelo_pseudotime_kernel_soft_threshold_emb_stream(self, adata: AnnData, fpath: str):
         ptk = PseudotimeKernel(adata, time_key="dpt_pseudotime")
         ptk.compute_transition_matrix(threshold_scheme="soft", frac_to_keep=0.3)
-        ptk.plot_projection(dpi=DPI, save=fpath)
+        ptk.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
 
     @compare()
     def test_scvelo_velocity_kernel_emb_stream(self, adata: AnnData, fpath: str):
         vk = VelocityKernel(adata)
         vk.compute_transition_matrix()
-        vk.plot_projection(dpi=DPI, save=fpath)
+        vk.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")

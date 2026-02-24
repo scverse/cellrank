@@ -4,6 +4,7 @@ import types
 from collections.abc import Sequence
 from typing import Any, Literal
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -25,6 +26,7 @@ from cellrank._utils._utils import (
     _convert_to_categorical_series,
     _merge_categorical_series,
     _unique_order_preserving,
+    save_fig,
 )
 from cellrank.estimators._base_estimator import BaseEstimator
 from cellrank.estimators.mixins._utils import (
@@ -437,6 +439,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         kwargs.setdefault("legend_loc", "on data")
         kwargs.pop("color_map", None)
         kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
+        save = kwargs.pop("save", None)
+        show = kwargs.pop("show", None)
         kwargs["cmap"] = cmap
         basis = kwargs.pop("basis", "umap")
         size = kwargs.get("size", 120_000 / self.adata.n_obs)
@@ -480,6 +484,11 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                         _add_outline_to_groups(
                             ax, coords, outline, self.adata.obs[key], size=size,
                         )
+
+        if save is not None:
+            save_fig(plt.gcf(), save)
+        if show is True or (show is None and save is None):
+            plt.show()
         # fmt: on
 
     def _plot_continuous(
@@ -528,6 +537,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         color = _unique_order_preserving(color)
         basis = kwargs.pop("basis", "umap")
         kwargs.pop("color_map", None)
+        save = kwargs.pop("save", None)
+        show = kwargs.pop("show", None)
 
         if mode == PlotMode.TIME:
             kwargs.setdefault("legend_loc", "best")
@@ -546,7 +557,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             _plot_time_scatter(
                 self.adata, self.adata.obs[time_key].values, list(_data_X.T),
                 color=color if len(color) else None,
-                title=title, xlabel=time_key, ylabel="probability", cmap=cmap, **kwargs,
+                title=title, xlabel=time_key, ylabel="probability", cmap=cmap,
+                save=save, show=show, **kwargs,
             )
         elif mode == PlotMode.EMBEDDING:
             kwargs.setdefault("legend_loc", "on data")
@@ -557,7 +569,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                     # https://github.com/theislab/scvelo/issues/673
                     logger.warning("Ignoring `color` when `mode='embedding'` and `same_plot=True`")
                 title = [_title] if title is None else title
-                _plot_color_gradients(self.adata, _data, basis=basis, title=title, **kwargs)
+                _plot_color_gradients(self.adata, _data, basis=basis, title=title,
+                                      save=save, show=show, **kwargs)
             else:
                 title = [f"{_title} {state}" for state in states] if title is None else title
                 if isinstance(title, str):
@@ -569,8 +582,12 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                         self.adata.obs[key] = col
                     sc.pl.embedding(
                         self.adata, basis=basis, color=color + list(prob_keys),
-                        title=title, cmap=cmap, **kwargs,
+                        title=title, cmap=cmap, show=False, **kwargs,
                     )
+                if save is not None:
+                    save_fig(plt.gcf(), save)
+                if show is True or (show is None and save is None):
+                    plt.show()
         else:
             raise NotImplementedError(f"Mode `{mode}` is not yet implemented.")
         # fmt: on
