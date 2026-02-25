@@ -24,8 +24,7 @@ body:
         Please paste the output of `session_info2.session_info()` below.
 
         ```python
-        import session_info2
-        session_info2.session_info()
+        import cellrank, session_info2; session_info2.session_info(dependencies=True)
         ```
       render: text
     validations:
