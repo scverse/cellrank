@@ -298,8 +298,8 @@ To make a new release:
 4. Create the release — this triggers a GitHub workflow that builds and publishes to [PyPI].
 
 After the PyPI release, the [conda-forge](https://conda-forge.org/) bot will automatically open a
-PR to update the [CellRank feedstock](https://github.com/conda-forge/cellrank-feedstock). Review and
-merge it to make the new version available via `conda install -c conda-forge cellrank`.
+PR to update the [CellRank feedstock](https://github.com/conda-forge/cellrank-feedstock).
+Dependencies are synced from PyPI via Grayskull and the PR is auto-merged once CI passes.
 
 [hatch-vcs]: https://pypi.org/project/hatch-vcs/
 [semver]: https://semver.org/
