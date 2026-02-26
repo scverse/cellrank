@@ -37,7 +37,7 @@ from cellrank.estimators.mixins._utils import (
     shadow,
 )
 from cellrank.kernels._base_kernel import KernelExpression
-from cellrank.pl._utils import _add_outline_to_groups, _plot_color_gradients, _plot_time_scatter
+from cellrank.pl._utils import _plot_color_gradients, _plot_time_scatter
 
 logger = logging.getLogger(__name__)
 __all__ = ["TermStatesEstimator"]
@@ -448,15 +448,10 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         # fmt: off
         with RandomKeys(self.adata, n=1 if same_plot else len(states), where="obs") as keys:
             if same_plot:
-                outline = _data.cat.categories.to_list()
-                _data = _data.cat.add_categories(["nan"]).fillna("nan")
-                states.append("nan")
-                color_mapper["nan"] = "#dedede"
                 self.adata.obs[keys[0]] = _data
                 self.adata.uns[f"{keys[0]}_colors"] = [color_mapper[name] for name in states]
                 title = _title if title is None else title
             else:
-                outline = None
                 for key, cat in zip(keys, states):
                     self.adata.obs[key] = _data.cat.set_categories([cat])
                     self.adata.uns[f"{key}_colors"] = [color_mapper[cat]]
@@ -465,6 +460,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             if isinstance(title, str):
                 title = [title]
 
+            kwargs.setdefault("na_color", "#dedede")
             axes = sc.pl.embedding(
                 self.adata,
                 basis=basis,
@@ -475,14 +471,23 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                 **kwargs,
             )
 
-            # Draw group-specific outlines (scVelo's add_outline with group names)
-            if outline is not None:
-                coords = self.adata.obsm[f"X_{basis}"]
+            # Overlay state cells with outlines so they appear on top of NaN cells
+            if same_plot:
                 axes_list = [axes] if not isinstance(axes, list | np.ndarray) else list(np.ravel(axes))
-                for ax, key in zip(axes_list[len(color):], keys):
-                    if key in self.adata.obs:
-                        _add_outline_to_groups(
-                            ax, coords, outline, self.adata.obs[key], size=size,
+                mask = _data.notna()
+                if mask.any():
+                    adata_sub = self.adata[mask].copy()
+                    for ax, key in zip(axes_list[len(color):], keys):
+                        sc.pl.embedding(
+                            adata_sub,
+                            basis=basis,
+                            color=key,
+                            add_outline=True,
+                            show=False,
+                            return_fig=False,
+                            ax=ax,
+                            legend_loc="none",
+                            size=size,
                         )
 
         if save is not None:
