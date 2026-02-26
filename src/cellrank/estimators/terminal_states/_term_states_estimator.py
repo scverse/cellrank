@@ -4,10 +4,11 @@ import types
 from collections.abc import Sequence
 from typing import Any, Literal
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import scipy.sparse as sp
-import scvelo as scv
 from anndata import AnnData
 from matplotlib.colors import to_hex
 from pandas.api.types import infer_dtype
@@ -25,6 +26,7 @@ from cellrank._utils._utils import (
     _convert_to_categorical_series,
     _merge_categorical_series,
     _unique_order_preserving,
+    save_fig,
 )
 from cellrank.estimators._base_estimator import BaseEstimator
 from cellrank.estimators.mixins._utils import (
@@ -35,6 +37,7 @@ from cellrank.estimators.mixins._utils import (
     shadow,
 )
 from cellrank.kernels._base_kernel import KernelExpression
+from cellrank.pl._utils import _plot_color_gradients, _plot_time_scatter
 
 logger = logging.getLogger(__name__)
 __all__ = ["TermStatesEstimator"]
@@ -340,7 +343,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         cmap
             Colormap for continuous annotations.
         kwargs
-            Keyword arguments for :func:`~scvelo.pl.scatter`.
+            Keyword arguments for :func:`~scanpy.pl.embedding`.
 
         Returns
         -------
@@ -434,20 +437,21 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
 
         same_plot = same_plot or len(names) == 1
         kwargs.setdefault("legend_loc", "on data")
-        kwargs["color_map"] = cmap
+        kwargs.pop("color_map", None)
+        kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
+        save = kwargs.pop("save", None)
+        show = kwargs.pop("show", None)
+        kwargs["cmap"] = cmap
+        basis = kwargs.pop("basis", "umap")
+        size = kwargs.get("size", 120_000 / self.adata.n_obs)
 
         # fmt: off
         with RandomKeys(self.adata, n=1 if same_plot else len(states), where="obs") as keys:
             if same_plot:
-                outline = _data.cat.categories.to_list()
-                _data = _data.cat.add_categories(["nan"]).fillna("nan")
-                states.append("nan")
-                color_mapper["nan"] = "#dedede"
                 self.adata.obs[keys[0]] = _data
                 self.adata.uns[f"{keys[0]}_colors"] = [color_mapper[name] for name in states]
                 title = _title if title is None else title
             else:
-                outline = None
                 for key, cat in zip(keys, states):
                     self.adata.obs[key] = _data.cat.set_categories([cat])
                     self.adata.uns[f"{key}_colors"] = [color_mapper[cat]]
@@ -456,13 +460,40 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             if isinstance(title, str):
                 title = [title]
 
-            scv.pl.scatter(
+            kwargs.setdefault("na_color", "#dedede")
+            axes = sc.pl.embedding(
                 self.adata,
+                basis=basis,
                 color=color + keys,
                 title=color + title,
-                add_outline=outline,
+                show=False,
+                return_fig=False,
                 **kwargs,
             )
+
+            # Overlay state cells with outlines so they appear on top of NaN cells
+            if same_plot:
+                axes_list = [axes] if not isinstance(axes, list | np.ndarray) else list(np.ravel(axes))
+                mask = _data.notna()
+                if mask.any():
+                    adata_sub = self.adata[mask].copy()
+                    for ax, key in zip(axes_list[len(color):], keys):
+                        sc.pl.embedding(
+                            adata_sub,
+                            basis=basis,
+                            color=key,
+                            add_outline=True,
+                            show=False,
+                            return_fig=False,
+                            ax=ax,
+                            legend_loc="none",
+                            size=size,
+                        )
+
+        if save is not None:
+            save_fig(plt.gcf(), save)
+        if show is True or (show is None and save is None):
+            plt.show()
         # fmt: on
 
     def _plot_continuous(
@@ -487,7 +518,6 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             states = _data.names
         if not len(states):
             raise ValueError("No lineages have been selected.")
-        is_singleton = _data.shape[1] == 1
         _data = _data[states].copy()
 
         if mode == "time" and same_plot:
@@ -510,6 +540,10 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         # fmt: off
         color = [] if color is None else (color,) if isinstance(color, str) else color
         color = _unique_order_preserving(color)
+        basis = kwargs.pop("basis", "umap")
+        kwargs.pop("color_map", None)
+        save = kwargs.pop("save", None)
+        show = kwargs.pop("show", None)
 
         if mode == PlotMode.TIME:
             kwargs.setdefault("legend_loc", "best")
@@ -525,40 +559,43 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             if len(color) and len(color) not in (1, _data_X.shape[1]):
                 raise ValueError(f"Expected `color` to be of length `1` or `{_data_X.shape[1]}`, "
                                  f"found `{len(color)}`.")
-            kwargs["x"] = self.adata.obs[time_key]
-            kwargs["y"] = list(_data_X.T)
-            kwargs["color"] = color if len(color) else None
-            kwargs["xlabel"] = [time_key] * len(states)
-            kwargs["ylabel"] = ["probability"] * len(states)
+            _plot_time_scatter(
+                self.adata, self.adata.obs[time_key].values, list(_data_X.T),
+                color=color if len(color) else None,
+                title=title, xlabel=time_key, ylabel="probability", cmap=cmap,
+                save=save, show=show, **kwargs,
+            )
         elif mode == PlotMode.EMBEDDING:
             kwargs.setdefault("legend_loc", "on data")
+            kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
+
             if same_plot:
                 if color:
                     # https://github.com/theislab/scvelo/issues/673
                     logger.warning("Ignoring `color` when `mode='embedding'` and `same_plot=True`")
                 title = [_title] if title is None else title
-                kwargs["color_gradients"] = _data
+                _plot_color_gradients(self.adata, _data, basis=basis, title=title,
+                                      save=save, show=show, **kwargs)
             else:
                 title = [f"{_title} {state}" for state in states] if title is None else title
                 if isinstance(title, str):
                     title = [title]
                 title = color + title
-                kwargs["color"] = color + list(_data_X.T)
+                # Store probability arrays as temp obs columns (scanpy requires column names)
+                with RandomKeys(self.adata, n=_data_X.shape[1], where="obs") as prob_keys:
+                    for key, col in zip(prob_keys, _data_X.T):
+                        self.adata.obs[key] = col
+                    sc.pl.embedding(
+                        self.adata, basis=basis, color=color + list(prob_keys),
+                        title=title, cmap=cmap, show=False, **kwargs,
+                    )
+                if save is not None:
+                    save_fig(plt.gcf(), save)
+                if show is True or (show is None and save is None):
+                    plt.show()
         else:
             raise NotImplementedError(f"Mode `{mode}` is not yet implemented.")
         # fmt: on
-
-        # e.g. a stationary distribution
-        if is_singleton and not np.allclose(_data_X, 1.0):
-            kwargs.setdefault("perc", [0, 95])
-            _ = kwargs.pop("color_gradients", None)
-
-        scv.pl.scatter(
-            self.adata,
-            title=title,
-            color_map=cmap,
-            **kwargs,
-        )
 
     def _set_categorical_labels(
         self,
