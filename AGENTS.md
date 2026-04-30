@@ -28,6 +28,12 @@ Every fact should have one owner. This file owns invariants and the reference ta
 | Test fixtures | `tests/conftest.py` |
 | Long-form refactor plans | `.github/prompts/` |
 
+## Review Guidelines
+
+For GitHub PR reviews, use `REVIEW_GUIDE.md` as the canonical review workflow and
+source of review-specific risk areas, testing checks, and documentation-impact checks.
+This file only owns the project invariants and source-of-truth map below.
+
 ## Critical Invariants
 
 - **Kernel composition arithmetic.** `+` normalizes weights to sum to 1; `*` is element-wise. Composition builds an expression tree (`KernelAdd`, `KernelMul`, `Constant` in `kernels/_base_kernel.py`). Changes here can silently shift transition matrices.
