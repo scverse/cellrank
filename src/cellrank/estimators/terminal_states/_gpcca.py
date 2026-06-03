@@ -1067,19 +1067,22 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             Source of the categorical annotation. Either:
 
             - a :class:`str`, interpreted as a categorical column in
-              :attr:`~anndata.AnnData.obs`. Each macrostate's bar shows the *counts* of
+              :attr:`~anndata.AnnData.obs`. Each macrostate's bar stacks the *counts* of
               the categories among its most-likely observations.
             - a :class:`dict` of the form ``{"obs": <column>}`` (equivalent to passing a
               :class:`str`) or ``{"obsm": <key>}``. In the latter case,
               :attr:`adata.obsm[key] <anndata.AnnData.obsm>` must be a
               :class:`~pandas.DataFrame` whose columns are the categories and whose rows
-              are per-observation proportions summing to :math:`1`. Each macrostate's bar
-              shows the (weighted) mean composition of its most-likely observations.
+              are per-observation proportions summing to :math:`1` (e.g. cell-type
+              fractions of aggregated samples). The proportion rows are summed per
+              macrostate, so the bar semantics are identical to the categorical case --
+              each observation contributes :math:`1`, split across categories -- only the
+              observations are now samples rather than cells.
         weight_key
             Only used when ``key`` points to :attr:`~anndata.AnnData.obsm`. Key from
-            :attr:`~anndata.AnnData.obs` with per-observation weights used to compute the
-            weighted mean composition, e.g. the number of cells per aggregated sample.
-            If :obj:`None`, each observation is weighted equally.
+            :attr:`~anndata.AnnData.obs` with per-observation weights, e.g. the number of
+            cells per aggregated sample, so the bars reflect cell-level rather than
+            sample-level frequencies. If :obj:`None`, each observation contributes equally.
         width
             Bar width in :math:`[0, 1]`.
         title
@@ -1110,10 +1113,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         mask = ~macrostates.isnull()
         if source == "obs":
             composition, categories = self._obs_composition(name, macrostates, mask)
-            y_label = "frequency"
         else:
             composition, categories = self._obsm_composition(name, weight_key, macrostates, mask)
-            y_label = "fraction"
 
         try:
             cats_colors = self.adata.uns[f"{name}_colors"]
@@ -1155,7 +1156,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         ax.margins(0.05)
 
         ax.set_xlabel("macrostate")
-        ax.set_ylabel(y_label)
+        ax.set_ylabel("frequency")
         if title is None:
             title = f"distribution over {name}"
         ax.set_title(title)
@@ -1204,7 +1205,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
     def _obsm_composition(
         self, key: str, weight_key: str | None, macrostates: pd.Series, mask: pd.Series
     ) -> tuple[pd.DataFrame, pd.Index]:
-        """Compute the (weighted) mean composition from an :attr:`~anndata.AnnData.obsm` proportion frame."""
+        """Sum the (weighted) proportions per macrostate from an :attr:`~anndata.AnnData.obsm` frame.
+
+        Each observation contributes its proportion row, so an unweighted bar height equals the number
+        of observations in the macrostate -- the direct analog of the cell counts in :meth:`_obs_composition`.
+        """
         if key not in self.adata.obsm:
             raise KeyError(f"Data not found in `adata.obsm[{key!r}]`.")
         fractions = self.adata.obsm[key]
@@ -1229,12 +1234,12 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             weights = self.adata.obs.loc[assigned.index, weight_key].to_numpy(dtype=float)
 
         categories = fractions.columns
-        values = fractions.to_numpy()
+        values = fractions.to_numpy() * weights[:, None]
         composition = pd.DataFrame(0.0, index=categories, columns=macrostates.cat.categories)
         for ms in macrostates.cat.categories:
             in_state = (assigned == ms).to_numpy()
             if in_state.any():
-                composition[ms] = np.average(values[in_state], axis=0, weights=weights[in_state])
+                composition[ms] = values[in_state].sum(axis=0)
         return composition, categories
 
     def _n_states(self, n_states: int | Sequence[int] | None) -> int:

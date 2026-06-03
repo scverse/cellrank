@@ -3353,6 +3353,45 @@ class TestMacrostateComposition:
         # explicit `{"obs": ...}` is equivalent to passing the bare string
         mc.plot_macrostate_composition({"obs": "clusters"}, dpi=DPI, save=fpath)
 
+    @staticmethod
+    def _bar_totals(ax) -> np.ndarray:
+        # sum stacked-bar heights per x position (one per macrostate)
+        by_x: dict[float, float] = {}
+        for patch in ax.patches:
+            x = round(patch.get_x(), 3)
+            by_x[x] = by_x.get(x, 0.0) + patch.get_height()
+        return np.array([by_x[x] for x in sorted(by_x)])
+
+    def test_msc_obsm_reproduces_obs_counts(self, g: GPCCA):
+        # one-hot proportions summed per macrostate == categorical cell counts
+        g.adata.obsm["clusters"] = pd.get_dummies(g.adata.obs["clusters"]).astype(float)
+        expected = (
+            g.macrostates.value_counts().reindex(g.macrostates.cat.categories, fill_value=0).to_numpy(dtype=float)
+        )
+
+        ax_obs = g.plot_macrostate_composition("clusters", show=False)
+        ax_obsm = g.plot_macrostate_composition({"obsm": "clusters"}, show=False)
+        np.testing.assert_allclose(self._bar_totals(ax_obs), expected)
+        np.testing.assert_allclose(self._bar_totals(ax_obsm), expected)
+        plt.close("all")
+
+    def test_msc_obsm_weighted_sums_weights(self, g: GPCCA):
+        # weighted bar height per macrostate == total weight of its observations
+        g.adata.obsm["clusters"] = pd.get_dummies(g.adata.obs["clusters"]).astype(float)
+        g.adata.obs["n_cells"] = np.arange(1, g.adata.n_obs + 1, dtype=float)
+        assigned = g.macrostates[~g.macrostates.isnull()]
+        expected = (
+            g.adata.obs.loc[assigned.index, "n_cells"]
+            .groupby(assigned, observed=False)
+            .sum()
+            .reindex(g.macrostates.cat.categories, fill_value=0)
+            .to_numpy(dtype=float)
+        )
+
+        ax = g.plot_macrostate_composition({"obsm": "clusters"}, weight_key="n_cells", show=False)
+        np.testing.assert_allclose(self._bar_totals(ax), expected)
+        plt.close("all")
+
     def test_msc_invalid_key_type(self, g: GPCCA):
         with pytest.raises(TypeError, match=r"Expected `key`"):
             g.plot_macrostate_composition(["clusters"], show=False)
