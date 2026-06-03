@@ -27,6 +27,21 @@ Every fact should have one owner. This file owns invariants and the reference ta
 | PR review workflow and risk areas | `REVIEW_GUIDE.md` |
 | Test fixtures | `tests/conftest.py` |
 
+## Module Map
+
+Two layers: **kernels** build transition matrices, **estimators** analyze them. Pointers only — class behavior lives in docstrings, design rationale in `docs/about/index.md`.
+
+| Module | What lives there |
+|--------|------------------|
+| `src/cellrank/kernels/` | Layer 1 — a kernel turns one biological signal into a transition matrix. `VelocityKernel`, `PseudotimeKernel`, `CytoTRACEKernel`, `ConnectivityKernel`, `RealTimeKernel`, `PrecomputedKernel`; base classes + composition in `_base_kernel.py`. |
+| `src/cellrank/estimators/` | Layer 2 — an estimator analyzes a transition matrix. `GPCCA` (recommended) and `CFLARE` under `terminal_states/`; spectral/fate logic in `mixins/`. |
+| `src/cellrank/models/` | Gene-trend models fit along lineages (`prepare` → `fit` → `predict`): `GAM`, `GAMR`, `SKLearnModel`. |
+| `src/cellrank/pl/` | Plotting: `circular_projection`, `gene_trends`, `heatmap`, `cluster_trends`, `log_odds`, `aggregate_fate_probabilities`. |
+| `src/cellrank/datasets.py` | Example datasets (downloaded on demand). |
+| `src/cellrank/_utils/` | Core utilities: `Lineage` (`_lineage.py`), AnnData key naming (`_key.py`), linear solvers (`_linear_solver.py`), optional-import guards (`_import_utils.py`). |
+
+**Typical flow:** build a kernel → `kernel.compute_transition_matrix()` → optionally compose (`0.8 * vk + 0.2 * ck`) → `GPCCA(kernel)` → `compute_schur()` → `compute_macrostates()` → `predict_terminal_states()` (or `set_terminal_states()`) → `compute_fate_probabilities()` → `compute_lineage_drivers()`.
+
 ## Review Guidelines
 
 For GitHub PR reviews, use `REVIEW_GUIDE.md` as the canonical review workflow and
@@ -35,14 +50,12 @@ This file only owns the project invariants and source-of-truth map below.
 
 ## Critical Invariants
 
-Module paths below are relative to `src/cellrank/`.
-
-- **Kernel composition arithmetic.** `+` normalizes weights to sum to 1; `*` is element-wise. Composition builds an expression tree (`KernelAdd`, `KernelMul`, `Constant` in `kernels/_base_kernel.py`). Changes here can silently shift transition matrices.
-- **Bidirectional kernels.** `~kernel` flips direction (forward ↔ backward) on bidirectional kernels only (runtime state is the `_backward` flag); direction is encoded in `fwd`/`bwd` AnnData key suffixes via `_utils/_key.py`.
+- **Kernel composition arithmetic.** `+` normalizes weights to sum to 1; `*` is element-wise. Composition builds an expression tree (`KernelAdd`, `KernelMul`, `Constant` in `src/cellrank/kernels/_base_kernel.py`). Changes here can silently shift transition matrices.
+- **Bidirectional kernels.** `~kernel` flips direction (forward ↔ backward) on bidirectional kernels only (runtime state is the `_backward` flag); direction is encoded in `fwd`/`bwd` AnnData key suffixes via `src/cellrank/_utils/_key.py`.
 - **AnnData serialization contract.** Kernels round-trip through `write_to_adata()` / `from_adata()`. Estimators maintain a shadow AnnData exposed via `to_adata()`. This is the stable boundary for saved analyses — high risk to change.
 - **GPCCA delegates to [pygpcca](https://github.com/msmdev/pyGPCCA).** Schur decomposition and macrostate rotation live upstream; don't reimplement in-repo.
-- **`Lineage`** (`_utils/_lineage.py`) is a numpy ndarray subclass with named columns and colors. Slicing and aggregation semantics are public API.
-- **AnnData key naming** goes through `_utils/_key.py`. Don't hand-roll key strings.
+- **`Lineage`** (`src/cellrank/_utils/_lineage.py`) is a numpy ndarray subclass with named columns and colors. Slicing and aggregation semantics are public API.
+- **AnnData key naming** goes through `src/cellrank/_utils/_key.py`. Don't hand-roll key strings.
 - **Logging.** `logging.getLogger(__name__)` with lazy `%` formatting — never f-strings in logger calls.
 - **Public API surface** = symbols re-exported from `src/cellrank/__init__.py` and the `cellrank.kernels` / `estimators` / `models` / `pl` / `datasets` namespaces. New top-level re-exports commit the project to an API.
 - **Optional dependencies** are pip extras: `jax`, `moscot`, `petsc`, `plot`, `r`, `scvelo`. Imports must be guarded and fail with a clear message when the extra is missing.

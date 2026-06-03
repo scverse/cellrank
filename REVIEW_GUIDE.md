@@ -17,11 +17,11 @@ Architecture, invariants, and commands live in `AGENTS.md`. Do not restate them 
 
 Pointers only — see `AGENTS.md` for the actual invariants.
 
-- **Kernel composition** (`kernels/_base_kernel.py`): weight normalization in `KernelAdd`, direction flipping in bidirectional kernels. Silent regressions possible.
+- **Kernel composition** (`src/cellrank/kernels/_base_kernel.py`): weight normalization in `KernelAdd`, direction flipping in bidirectional kernels. Silent regressions possible.
 - **AnnData serialization** (`write_to_adata` / `from_adata`, estimator shadow AnnData): breaks saved analyses and downstream notebooks if the round-trip changes.
-- **`RealTimeKernel`** (`kernels/_real_time_kernel.py`): assembling per-timepoint couplings (`from_moscot` / `from_wot`) into a global block transition matrix, with configurable self-transitions — the most complex path.
-- **Spectral estimators** (`estimators/mixins/`): Schur, eigen, fate-probability, and lineage-driver mixins are correctness-sensitive.
-- **`Lineage`** (`_utils/_lineage.py`): ndarray subclass with public slicing/coloring semantics.
+- **`RealTimeKernel`** (`src/cellrank/kernels/_real_time_kernel.py`): assembling per-timepoint couplings (`from_moscot` / `from_wot`) into a global block transition matrix, with configurable self-transitions — the most complex path.
+- **Spectral estimators** (`src/cellrank/estimators/mixins/`): Schur, eigen, fate-probability, and lineage-driver mixins are correctness-sensitive.
+- **`Lineage`** (`src/cellrank/_utils/_lineage.py`): ndarray subclass with public slicing/coloring semantics.
 - **Optional-dep guards**: new `jax` / `moscot` / `petsc4py` / `slepc4py` / `rpy2` / `wot` / `scvelo` / `adjusttext` usage must route through the existing guards and not leak into top-level imports.
 - **Public API surface**: new re-exports in `src/cellrank/__init__.py` or in `kernels` / `estimators` / `models` / `pl` / `datasets`.
 
@@ -31,12 +31,12 @@ Flat layout — `tests/test_X.py` keyed by component, not a mirror of `src/`.
 
 | Changed path | Primary tests |
 |--------------|---------------|
-| `kernels/` | `tests/test_kernels.py`; add `tests/test_pipeline.py` for composition |
-| `estimators/` | `tests/test_gpcca.py`, `tests/test_cflare.py`, `tests/test_lineage_drivers.py`, `tests/test_pipeline.py` |
-| `models/` | `tests/test_model.py` |
-| `pl/` | `tests/test_plotting.py` |
-| `_utils/_lineage.py` | `tests/test_lineage.py` |
-| `_utils/_linear_solver.py` | `tests/test_linear_solver.py` |
+| `src/cellrank/kernels/` | `tests/test_kernels.py`; add `tests/test_pipeline.py` for composition |
+| `src/cellrank/estimators/` | `tests/test_gpcca.py`, `tests/test_cflare.py`, `tests/test_lineage_drivers.py`, `tests/test_pipeline.py` |
+| `src/cellrank/models/` | `tests/test_model.py` |
+| `src/cellrank/pl/` | `tests/test_plotting.py` |
+| `src/cellrank/_utils/_lineage.py` | `tests/test_lineage.py` |
+| `src/cellrank/_utils/_linear_solver.py` | `tests/test_linear_solver.py` |
 | Fixture changes | `tests/conftest.py` |
 
 ## Testing
