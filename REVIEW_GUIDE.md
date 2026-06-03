@@ -19,7 +19,7 @@ Pointers only — see `AGENTS.md` for the actual invariants.
 
 - **Kernel composition** (`kernels/_base_kernel.py`): weight normalization in `KernelAdd`, direction flipping in bidirectional kernels. Silent regressions possible.
 - **AnnData serialization** (`write_to_adata` / `from_adata`, estimator shadow AnnData): breaks saved analyses and downstream notebooks if the round-trip changes.
-- **`RealTimeKernel`** (`kernels/_real_time_kernel.py`): coupling restitching from moscot / WOT is the most complex path.
+- **`RealTimeKernel`** (`kernels/_real_time_kernel.py`): assembling per-timepoint couplings (`from_moscot` / `from_wot`) into a global block transition matrix, with configurable self-transitions — the most complex path.
 - **Spectral estimators** (`estimators/mixins/`): Schur, eigen, fate-probability, and lineage-driver mixins are correctness-sensitive.
 - **`Lineage`** (`_utils/_lineage.py`): ndarray subclass with public slicing/coloring semantics.
 - **Optional-dep guards**: new `jax` / `moscot` / `petsc4py` / `slepc4py` / `rpy2` / `wot` / `scvelo` / `adjusttext` usage must route through the existing guards and not leak into top-level imports.

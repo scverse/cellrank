@@ -20,13 +20,12 @@ Every fact should have one owner. This file owns invariants and the reference ta
 |-------|----------------|
 | User-facing overview, install | `README.md`, `docs/index.md`, `docs/installation.md` |
 | Design principles, two-layer architecture, scalability | `docs/about/index.md` |
-| Public API reference | `docs/api/` (and autosummary under `docs/api/_autosummary/`) |
+| Public API reference | `docs/api/` (autosummary pages generated at build time) |
 | Contributor setup, testing, docs build | `docs/contributing.md` |
-| Tutorials | `docs/notebooks/tutorials/` |
+| Tutorials | `docs/notebooks/tutorials/` (`cellrank_notebooks` submodule) |
 | Release notes | `docs/release_notes.md` |
 | PR review workflow and risk areas | `REVIEW_GUIDE.md` |
 | Test fixtures | `tests/conftest.py` |
-| Long-form refactor plans | `.github/prompts/` |
 
 ## Review Guidelines
 
@@ -36,8 +35,10 @@ This file only owns the project invariants and source-of-truth map below.
 
 ## Critical Invariants
 
+Module paths below are relative to `src/cellrank/`.
+
 - **Kernel composition arithmetic.** `+` normalizes weights to sum to 1; `*` is element-wise. Composition builds an expression tree (`KernelAdd`, `KernelMul`, `Constant` in `kernels/_base_kernel.py`). Changes here can silently shift transition matrices.
-- **Bidirectional kernels.** `~kernel` flips direction (forward ↔ backward) on bidirectional kernels only. Direction metadata persists via `_utils/_key.py` helpers.
+- **Bidirectional kernels.** `~kernel` flips direction (forward ↔ backward) on bidirectional kernels only (runtime state is the `_backward` flag); direction is encoded in `fwd`/`bwd` AnnData key suffixes via `_utils/_key.py`.
 - **AnnData serialization contract.** Kernels round-trip through `write_to_adata()` / `from_adata()`. Estimators maintain a shadow AnnData exposed via `to_adata()`. This is the stable boundary for saved analyses — high risk to change.
 - **GPCCA delegates to [pygpcca](https://github.com/msmdev/pyGPCCA).** Schur decomposition and macrostate rotation live upstream; don't reimplement in-repo.
 - **`Lineage`** (`_utils/_lineage.py`) is a numpy ndarray subclass with named columns and colors. Slicing and aggregation semantics are public API.
