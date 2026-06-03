@@ -1123,8 +1123,17 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         if len(cats_colors) < len(categories):
             cats_colors = _create_categorical_colors(len(categories))
         cat_color_mapper = dict(zip(categories, cats_colors))
-        x_indices = np.arange(len(macrostates.cat.categories))
+        n_states = len(macrostates.cat.categories)
+        x_indices = np.arange(n_states)
         bottom = np.zeros_like(x_indices, dtype=float)
+
+        if figsize is None:
+            # scale width with the number of macrostates and reserve room for an
+            # outside legend, otherwise the bars get squeezed into a narrow strip
+            fig_width = max(6.0, 1.1 * n_states)
+            if legend_loc not in (None, "none") and legend_loc.endswith("out"):
+                fig_width += 0.18 * max(len(str(cat)) for cat in categories) + 1.5
+            figsize = (fig_width, 5.0)
 
         width = min(1, max(0, width))
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi, tight_layout=True)
