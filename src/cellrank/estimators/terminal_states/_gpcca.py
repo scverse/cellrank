@@ -1043,7 +1043,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
     @d.dedent
     def plot_macrostate_composition(
         self,
-        key: str,
+        key: str | Mapping[str, str],
+        weight_key: str | None = None,
         width: float = 0.8,
         title: str | None = None,
         labelrot: float = 45,
@@ -1055,11 +1056,30 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
     ) -> Axes | None:
         """Plot histogram of macrostates over categorical annotations.
 
+        The annotation can either be a hard categorical assignment, with one label per
+        observation, or a soft assignment, with a distribution over categories per
+        observation (e.g. cell-type fractions of aggregated samples).
+
         Parameters
         ----------
         %(adata)s
         key
-            Key from :attr:`~anndata.AnnData.obs` containing categorical annotations.
+            Source of the categorical annotation. Either:
+
+            - a :class:`str`, interpreted as a categorical column in
+              :attr:`~anndata.AnnData.obs`. Each macrostate's bar shows the *counts* of
+              the categories among its most-likely observations.
+            - a :class:`dict` of the form ``{"obs": <column>}`` (equivalent to passing a
+              :class:`str`) or ``{"obsm": <key>}``. In the latter case,
+              :attr:`adata.obsm[key] <anndata.AnnData.obsm>` must be a
+              :class:`~pandas.DataFrame` whose columns are the categories and whose rows
+              are per-observation proportions summing to :math:`1`. Each macrostate's bar
+              shows the (weighted) mean composition of its most-likely observations.
+        weight_key
+            Only used when ``key`` points to :attr:`~anndata.AnnData.obsm`. Key from
+            :attr:`~anndata.AnnData.obs` with per-observation weights used to compute the
+            weighted mean composition, e.g. the number of cells per aggregated sample.
+            If :obj:`None`, each observation is weighted equally.
         width
             Bar width in :math:`[0, 1]`.
         title
@@ -1082,31 +1102,33 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         macrostates = self.macrostates
         if macrostates is None:
             raise RuntimeError("Compute macrostates first as `.compute_macrostates()`.")
-        if key not in self.adata.obs:
-            raise KeyError(f"Data not found in `adata.obs[{key!r}]`.")
-        if not isinstance(self.adata.obs[key].dtype, pd.CategoricalDtype):
-            raise TypeError(
-                f"Expected `adata.obs[{key!r}]` to be `categorical`, found `{infer_dtype(self.adata.obs[key])}`."
-            )
+
+        source, name = self._resolve_composition_key(key)
+        if weight_key is not None and source != "obsm":
+            raise ValueError("`weight_key` is only supported when `key` points to `adata.obsm`.")
 
         mask = ~macrostates.isnull()
-        df = (
-            pd.DataFrame({"macrostates": macrostates, key: self.adata.obs[key]})[mask]
-            .groupby([key, "macrostates"], observed=False)
-            .size()
-        )
+        if source == "obs":
+            composition, categories = self._obs_composition(name, macrostates, mask)
+            y_label = "frequency"
+        else:
+            composition, categories = self._obsm_composition(name, weight_key, macrostates, mask)
+            y_label = "fraction"
+
         try:
-            cats_colors = self.adata.uns[f"{key}_colors"]
+            cats_colors = self.adata.uns[f"{name}_colors"]
         except KeyError:
-            cats_colors = _create_categorical_colors(len(self.adata.obs[key].cat.categories))
-        cat_color_mapper = dict(zip(self.adata.obs[key].cat.categories, cats_colors))
+            cats_colors = _create_categorical_colors(len(categories))
+        if len(cats_colors) < len(categories):
+            cats_colors = _create_categorical_colors(len(categories))
+        cat_color_mapper = dict(zip(categories, cats_colors))
         x_indices = np.arange(len(macrostates.cat.categories))
         bottom = np.zeros_like(x_indices, dtype=float)
 
         width = min(1, max(0, width))
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi, tight_layout=True)
         for cat, color in cat_color_mapper.items():
-            frequencies = df.loc[cat]
+            frequencies = composition.loc[cat].to_numpy()
             # do not add to legend if category is missing
             if np.sum(frequencies) > 0:
                 ax.bar(
@@ -1119,12 +1141,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
                     ec="black",
                     lw=0.5,
                 )
-                bottom += np.array(frequencies)
+                bottom += frequencies
 
         ax.set_xticks(x_indices)
         ax.set_xticklabels(
-            # assuming at least 1 category
-            frequencies.index,
+            macrostates.cat.categories,
             rotation=labelrot,
             ha="center" if labelrot in (0, 90) else "right",
         )
@@ -1134,9 +1155,9 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         ax.margins(0.05)
 
         ax.set_xlabel("macrostate")
-        ax.set_ylabel("frequency")
+        ax.set_ylabel(y_label)
         if title is None:
-            title = f"distribution over {key}"
+            title = f"distribution over {name}"
         ax.set_title(title)
         if legend_loc not in (None, "none"):
             _position_legend(ax, legend_loc=legend_loc)
@@ -1146,6 +1167,75 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
         if not show:
             return ax
+
+    @staticmethod
+    def _resolve_composition_key(key: str | Mapping[str, str]) -> tuple[str, str]:
+        """Resolve ``key`` to a ``(source, name)`` pair, where ``source`` is ``'obs'`` or ``'obsm'``."""
+        if isinstance(key, str):
+            return "obs", key
+        if isinstance(key, Mapping):
+            if len(key) != 1:
+                raise ValueError(f"Expected `key` to have exactly one entry, found `{len(key)}`.")
+            ((source, name),) = key.items()
+            if source not in ("obs", "obsm"):
+                raise ValueError(f"Expected `key` to use `'obs'` or `'obsm'`, found `{source!r}`.")
+            return source, name
+        raise TypeError(f"Expected `key` to be a `str` or a `dict`, found `{type(key).__name__!r}`.")
+
+    def _obs_composition(self, key: str, macrostates: pd.Series, mask: pd.Series) -> tuple[pd.DataFrame, pd.Index]:
+        """Count each :attr:`~anndata.AnnData.obs` category per macrostate."""
+        if key not in self.adata.obs:
+            raise KeyError(f"Data not found in `adata.obs[{key!r}]`.")
+        if not isinstance(self.adata.obs[key].dtype, pd.CategoricalDtype):
+            raise TypeError(
+                f"Expected `adata.obs[{key!r}]` to be `categorical`, found `{infer_dtype(self.adata.obs[key])}`."
+            )
+
+        categories = self.adata.obs[key].cat.categories
+        composition = (
+            pd.DataFrame({"macrostates": macrostates, key: self.adata.obs[key]})[mask]
+            .groupby([key, "macrostates"], observed=False)
+            .size()
+            .unstack("macrostates")
+            .reindex(index=categories, columns=macrostates.cat.categories, fill_value=0)
+        )
+        return composition, categories
+
+    def _obsm_composition(
+        self, key: str, weight_key: str | None, macrostates: pd.Series, mask: pd.Series
+    ) -> tuple[pd.DataFrame, pd.Index]:
+        """Compute the (weighted) mean composition from an :attr:`~anndata.AnnData.obsm` proportion frame."""
+        if key not in self.adata.obsm:
+            raise KeyError(f"Data not found in `adata.obsm[{key!r}]`.")
+        fractions = self.adata.obsm[key]
+        if not isinstance(fractions, pd.DataFrame):
+            raise TypeError(
+                f"Expected `adata.obsm[{key!r}]` to be a `pandas.DataFrame`, found `{type(fractions).__name__}`."
+            )
+        # align to obs_names positionally, ignoring whatever index the frame carries
+        fractions = pd.DataFrame(fractions.to_numpy(), index=self.adata.obs_names, columns=fractions.columns)
+
+        assigned = macrostates[mask]
+        fractions = fractions.loc[assigned.index]
+        row_sums = fractions.to_numpy().sum(axis=1)
+        if not np.allclose(row_sums, 1.0, atol=1e-3):
+            raise ValueError(f"Expected rows of `adata.obsm[{key!r}]` to be proportions summing to `1`.")
+
+        if weight_key is None:
+            weights = np.ones(len(assigned), dtype=float)
+        else:
+            if weight_key not in self.adata.obs:
+                raise KeyError(f"Weights not found in `adata.obs[{weight_key!r}]`.")
+            weights = self.adata.obs.loc[assigned.index, weight_key].to_numpy(dtype=float)
+
+        categories = fractions.columns
+        values = fractions.to_numpy()
+        composition = pd.DataFrame(0.0, index=categories, columns=macrostates.cat.categories)
+        for ms in macrostates.cat.categories:
+            in_state = (assigned == ms).to_numpy()
+            if in_state.any():
+                composition[ms] = np.average(values[in_state], axis=0, weights=weights[in_state])
+        return composition, categories
 
     def _n_states(self, n_states: int | Sequence[int] | None) -> int:
         if n_states is None:
