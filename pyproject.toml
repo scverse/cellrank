@@ -19,7 +19,6 @@ maintainers = [
   { name = "Marius Lange", email = "mlange@ethz.ch" },
   { name = "Philipp Weiler" },
 ]
-
 authors = [
   { name = "Marius Lange" },
   { name = "Michal Klein" },
@@ -37,6 +36,7 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
   "Topic :: Scientific/Engineering :: Mathematics",
   "Topic :: Scientific/Engineering :: Visualization",
@@ -62,7 +62,6 @@ dependencies = [
   "session-info2>=0.2",
   "wrapt>=1.16",
 ]
-
 optional-dependencies.jax = [ "jax", "jaxlib" ]
 optional-dependencies.moscot = [ "moscot" ]
 optional-dependencies.petsc = [ "mpi4py", "petsc4py", "slepc4py" ]
@@ -70,10 +69,10 @@ optional-dependencies.plot = [ "adjusttext" ]
 optional-dependencies.r = [ "rpy2>=3.3" ]
 optional-dependencies.scvelo = [ "scvelo>=0.3" ]
 urls."Bug Tracker" = "https://github.com/theislab/cellrank/issues"
+urls."Source Code" = "https://github.com/theislab/cellrank"
 urls.Documentation = "https://cellrank.readthedocs.io"
 urls.Download = "https://cellrank.readthedocs.io/en/latest/installation.html"
 urls.Homepage = "https://github.com/theislab/cellrank"
-urls."Source Code" = "https://github.com/theislab/cellrank"
 
 [dependency-groups]
 dev = [
@@ -104,43 +103,32 @@ docs = [
   "sphinxcontrib-spelling>=8",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = [ "src/cellrank" ]
+[tool.hatch]
+version.source = "vcs"
+build.targets.wheel.packages = [ "src/cellrank" ]
+envs.default.installer = "uv"
+envs.default.dependency-groups = [ "dev" ]
+envs.docs.scripts.auto = "sphinx-autobuild docs docs/_build/html --open-browser --watch README.md {args}"
+envs.docs.scripts.build = "sphinx-build -M html docs docs/_build {args}"
+envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
+envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
+envs.docs.dependency-groups = [ "docs" ]
+envs.hatch-test.matrix = [
+  { deps = [ "stable" ], python = [ "3.12", "3.14" ] },
+  { deps = [ "pre" ], python = [ "3.14" ] }
+]
+envs.hatch-test.overrides.matrix.deps.env-vars = [ { value = "allow", key = "UV_PRERELEASE", if = [ "pre" ] } ]
+envs.hatch-test.dependency-groups = [ "test" ]
 
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.envs.default]
-installer = "uv"
-dependency-groups = [ "dev" ]
-
-[tool.hatch.envs.hatch-test]
-dependency-groups = [ "test" ]
-
-[[tool.hatch.envs.hatch-test.matrix]]
-deps = [ "stable" ]
-python = [ "3.12", "3.14" ]
-
-[[tool.hatch.envs.hatch-test.matrix]]
-deps = [ "pre" ]
-python = [ "3.14" ]
-
-[[tool.hatch.envs.hatch-test.overrides.matrix.deps.env-vars]]
-key = "UV_PRERELEASE"
-value = "allow"
-if = [ "pre" ]
-
-[tool.hatch.envs.docs]
-dependency-groups = [ "docs" ]
-scripts.build = "sphinx-build -M html docs docs/_build {args}"
-scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
-scripts.clean = "git clean -fdX -- {args:docs}"
-scripts.auto = "sphinx-autobuild docs docs/_build/html --open-browser --watch README.md {args}"
+[tool.uv]
+# Include test deps in `uv sync` so local dev has them (e.g. adjusttext, pytest)
+default-groups = [ "dev", "test" ]
+# pygpcca 1.0.4 incorrectly pins jinja2==3.0.3; override until next release
+override-dependencies = [ "jinja2>=3.1" ]
 
 [tool.ruff]
 line-length = 120
 src = [ "src" ]
-
 format.docstring-code-format = true
 lint.select = [
   "B",   # flake8-bugbear
@@ -175,7 +163,7 @@ lint.ignore = [
   "E731",
   # allow I, O, l as variable names -> I is the identity matrix, i, j, k, l is reasonable indexing notation
   "E741",
-  "PT011", # TODO/
+  "PT011",  # TODO/
   # Do not implicitly `return None` in function able to return non-`None` value
   "RET502",
   # Missing explicit `return` at the end of function able to return non-`None` value
@@ -199,31 +187,29 @@ lint.flake8-quotes.inline-quotes = "double"
 lint.flake8-tidy-imports.ban-relative-imports = "all"
 lint.pydocstyle.convention = "numpy"
 
-[tool.pytest.ini_options]
-testpaths = "tests"
-xfail_strict = true
-addopts = [ "--import-mode=importlib" ]
+[tool.pytest]
+ini_options.testpaths = "tests"
+ini_options.addopts = [ "--import-mode=importlib" ]
+ini_options.xfail_strict = true
 
-[tool.coverage.run]
-branch = true
-parallel = true
-source = [ "src/" ]
-omit = [
+[tool.coverage]
+run.branch = true
+run.omit = [
   "*/__init__.py",
 ]
-
-[tool.coverage.report]
-exclude_lines = [
+run.parallel = true
+run.source = [ "src/" ]
+report.exclude_lines = [
   '\#.*pragma:\s*no.?cover',
-  "^if __name__ == .__main__.:$",
   '^\s*raise AssertionError\b',
   '^\s*raise NotImplementedError\b',
   '^\s*return NotImplemented\b',
+  "^if __name__ == .__main__.:$",
 ]
-precision = 2
-show_missing = true
-skip_empty = true
-sort = "Miss"
+report.precision = 2
+report.show_missing = true
+report.skip_empty = true
+report.sort = "Miss"
 
 [tool.rstcheck]
 ignore_directives = [
@@ -245,9 +231,3 @@ ignore_roles = [
   "doc",
   "cite",
 ]
-
-[tool.uv]
-# Include test deps in `uv sync` so local dev has them (e.g. adjusttext, pytest)
-default-groups = [ "dev", "test" ]
-# pygpcca 1.0.4 incorrectly pins jinja2==3.0.3; override until next release
-override-dependencies = [ "jinja2>=3.1" ]
