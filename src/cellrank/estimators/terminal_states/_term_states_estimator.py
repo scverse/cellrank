@@ -322,7 +322,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
     @inject_docs(m=PlotMode)
     def plot_macrostates(
         self,
-        which: Literal["all", "initial", "terminal"],
+        which: Literal["all", "initial", "terminal", "initial_and_terminal"],
         states: str | Sequence[str] | None = None,
         color: str | None = None,
         discrete: bool = True,
@@ -344,6 +344,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             - ``'all'`` - plot all macrostates.
             - ``'initial'`` - plot macrostates marked as :attr:`initial_states`.
             - ``'terminal'`` - plot macrostates marked as :attr:`terminal_states`.
+            - ``'initial_and_terminal'`` - plot both :attr:`initial_states` and :attr:`terminal_states` in one
+              plot. States are renamed to ``'initial: <name>'`` and ``'terminal: <name>'`` to tell them apart.
         states
             Subset of the macrostates to show. If :obj:`None`, plot all macrostates.
         color
@@ -379,12 +381,15 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             obj = self._init_states
         elif which == "terminal":
             obj = self._term_states
+        elif which == "initial_and_terminal":
+            obj = self._combine_initial_terminal(discrete=discrete)
         else:
             raise ValueError(
-                f"Unable to plot `{which!r}` states. Valid options are: `{['all', 'initial', 'terminal']}`."
+                f"Unable to plot `{which!r}` states. Valid options are: "
+                f"`{['all', 'initial', 'terminal', 'initial_and_terminal']}`."
             )
 
-        name = "macrostates" if which == "macro" else f"{which} states"
+        name = "initial and terminal states" if which == "initial_and_terminal" else f"{which} states"
         if obj.assignment is None and obj.memberships is None:
             raise RuntimeError(f"Compute {name} first.")
 
@@ -422,6 +427,52 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             cmap=cmap,
             **kwargs,
         )
+
+    def _combine_initial_terminal(self, discrete: bool) -> StatesHolder:
+        """Merge :attr:`initial_states` and :attr:`terminal_states` into a single :class:`StatesHolder`.
+
+        States are renamed to ``'initial: <name>'`` / ``'terminal: <name>'`` so they can be told apart in the
+        legend. In the rare case where a cell is assigned to both an initial and a terminal state
+        (only possible with ``allow_overlap=True``), the initial-state assignment takes precedence in discrete mode.
+        """
+        init, term = self._init_states, self._term_states
+        for kind, holder in [("initial", init), ("terminal", term)]:
+            if holder.assignment is None and holder.memberships is None:
+                raise RuntimeError(f"Compute {kind} states first.")
+
+        def _rename(prefix: str, names: Sequence[str]) -> list[str]:
+            return [f"{prefix}: {name}" for name in names]
+
+        assignment = colors = memberships = None
+
+        # discrete representation
+        if init.assignment is not None and term.assignment is not None:
+            init_a, term_a = init.assignment, term.assignment
+            init_cats = _rename("initial", init_a.cat.categories)
+            term_cats = _rename("terminal", term_a.cat.categories)
+            init_r = init_a.cat.rename_categories(dict(zip(init_a.cat.categories, init_cats)))
+            term_r = term_a.cat.rename_categories(dict(zip(term_a.cat.categories, term_cats)))
+            combined = init_r.astype(object).combine_first(term_r.astype(object))
+            assignment = pd.Series(
+                pd.Categorical(combined, categories=init_cats + term_cats),
+                index=init_a.index,
+            )
+            if init.colors is not None and term.colors is not None:
+                colors = np.concatenate([init.colors, term.colors])
+
+        # continuous representation
+        if init.memberships is not None and term.memberships is not None:
+            im, tm = init.memberships, term.memberships
+            memberships = Lineage(
+                np.concatenate([im.X, tm.X], axis=1),
+                names=_rename("initial", im.names) + _rename("terminal", tm.names),
+                colors=list(im.colors) + list(tm.colors),
+            )
+
+        if discrete and assignment is None:
+            raise RuntimeError("Unable to plot initial and terminal states in discrete mode, compute them first.")
+
+        return StatesHolder(assignment=assignment, colors=colors, memberships=memberships)
 
     def _plot_discrete(
         self,

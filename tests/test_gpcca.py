@@ -534,6 +534,50 @@ class TestGPCCA:
         assert len(mc.initial_states.cat.categories) == 3
         assert mc.initial_states_memberships.shape == (adata_large.n_obs, 3)
 
+    @staticmethod
+    def _gpcca_with_initial_and_terminal(adata_large: AnnData) -> "cr.estimators.GPCCA":
+        vk = VelocityKernel(adata_large).compute_transition_matrix(softmax_scale=4)
+        ck = ConnectivityKernel(adata_large).compute_transition_matrix()
+        mc = cr.estimators.GPCCA(0.8 * vk + 0.2 * ck)
+        mc.compute_schur(n_components=10, method="krylov")
+        mc.compute_macrostates(n_states=4, n_cells=5)
+        mc.predict_terminal_states(method="top_n", n_states=2)
+        mc.predict_initial_states(n_states=1, allow_overlap=True)
+        return mc
+
+    def test_combine_initial_terminal_discrete(self, adata_large: AnnData):
+        mc = self._gpcca_with_initial_and_terminal(adata_large)
+
+        combined = mc._combine_initial_terminal(discrete=True)
+        init_cats = [f"initial: {c}" for c in mc.initial_states.cat.categories]
+        term_cats = [f"terminal: {c}" for c in mc.terminal_states.cat.categories]
+
+        np.testing.assert_array_equal(combined.assignment.cat.categories, init_cats + term_cats)
+        assert len(combined.colors) == len(init_cats) + len(term_cats)
+        np.testing.assert_array_equal(combined.memberships.names, init_cats + term_cats)
+
+    def test_combine_initial_terminal_requires_both(self, adata_large: AnnData):
+        vk = VelocityKernel(adata_large).compute_transition_matrix(softmax_scale=4)
+        ck = ConnectivityKernel(adata_large).compute_transition_matrix()
+        mc = cr.estimators.GPCCA(0.8 * vk + 0.2 * ck)
+        mc.compute_schur(n_components=10, method="krylov")
+        mc.compute_macrostates(n_states=4, n_cells=5)
+        mc.predict_terminal_states(method="top_n", n_states=2)
+
+        with pytest.raises(RuntimeError, match="Compute initial states first"):
+            mc.plot_macrostates(which="initial_and_terminal")
+
+    def test_plot_macrostates_invalid_which(self, adata_large: AnnData):
+        mc = self._gpcca_with_initial_and_terminal(adata_large)
+        with pytest.raises(ValueError, match="Unable to plot"):
+            mc.plot_macrostates(which="foobar")
+
+    @pytest.mark.parametrize("discrete", [True, False])
+    @pytest.mark.parametrize("same_plot", [True, False])
+    def test_plot_macrostates_initial_and_terminal(self, adata_large: AnnData, discrete: bool, same_plot: bool):
+        mc = self._gpcca_with_initial_and_terminal(adata_large)
+        mc.plot_macrostates(which="initial_and_terminal", discrete=discrete, same_plot=same_plot)
+
     def test_compute_initial_states_from_forward_normal_run(self, adata_large: AnnData):
         vk = VelocityKernel(adata_large, backward=False).compute_transition_matrix(softmax_scale=4)
         ck = ConnectivityKernel(adata_large).compute_transition_matrix()
