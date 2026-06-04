@@ -27,6 +27,7 @@ from cellrank._utils._enum import ModeEnum
 from cellrank._utils._key import Key
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import (
+    _aggregate_proportions,
     _check_proportions,
     _eigengap,
     _fuzzy_to_discrete,
@@ -1261,12 +1262,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         weights = _obsm_proportion_weights(self.adata, weight_key, assigned.index)
 
         categories = fractions.columns
-        values = fractions.to_numpy() * weights[:, None]
-        composition = pd.DataFrame(0.0, index=categories, columns=macrostates.cat.categories)
-        for ms in macrostates.cat.categories:
-            in_state = (assigned == ms).to_numpy()
-            if in_state.any():
-                composition[ms] = values[in_state].sum(axis=0)
+        # `_aggregate_proportions` returns macrostates x categories; transpose for the stacked bars
+        composition = _aggregate_proportions(fractions, assigned, weights).T
         return composition, categories
 
     def _n_states(self, n_states: int | Sequence[int] | None) -> int:

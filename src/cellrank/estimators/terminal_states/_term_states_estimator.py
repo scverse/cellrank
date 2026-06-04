@@ -17,7 +17,6 @@ from cellrank._utils._colors import (
     _convert_to_hex_colors,
     _create_categorical_colors,
     _map_names_and_colors,
-    _map_names_and_colors_from_proportions,
 )
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._key import Key
@@ -26,6 +25,7 @@ from cellrank._utils._utils import (
     RandomKeys,
     _check_proportions,
     _convert_to_categorical_series,
+    _map_names_and_colors_from_proportions,
     _merge_categorical_series,
     _obsm_proportion_weights,
     _obsm_proportions,
