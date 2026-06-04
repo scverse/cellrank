@@ -1290,7 +1290,8 @@ class TestRealTimeKernel:
         ot_model = wot.ot.OTModel(adata, day_field="exp_time", growth_iters=gr_iters)
         ot_model.compute_all_transport_maps(tmap_out=f"{tmpdir}/")
 
-        tmk = RealTimeKernel.from_wot(adata, path=tmpdir, time_key="exp_time")
+        with pytest.warns(DeprecationWarning, match=r"from_wot.*deprecated"):
+            tmk = RealTimeKernel.from_wot(adata, path=tmpdir, time_key="exp_time")
         obs = pd.read_csv(tmpdir / "tmaps_g.txt", index_col=0, sep="\t")
         tmk = tmk.compute_transition_matrix()
 
