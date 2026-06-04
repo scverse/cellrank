@@ -137,6 +137,22 @@ def create_failed_model(adata: AnnData) -> cr.models.FailedModel:
     return cr.models.FailedModel(create_model(adata), exc="foobar")
 
 
+def flatten_onto_white(image_path: str | pathlib.Path) -> None:
+    """Composite an (possibly transparent) image onto an opaque white background, in place.
+
+    CellRank saves figures with a transparent background, so most pixels are fully
+    transparent. :func:`matplotlib.testing.compare.compare_images` keeps the alpha channel
+    whenever an image is not fully opaque and therefore also diffs the *RGB values underneath
+    transparent pixels* -- which are meaningless and whose fill value changed across matplotlib
+    versions. That makes the comparison report huge RMS values even when the visible image is
+    unchanged. Flattening onto white (as e.g. squidpy/scanpy do by saving opaque) makes the
+    comparison depend only on visible pixels.
+    """
+    image = Image.open(image_path).convert("RGBA")
+    background = Image.new("RGBA", image.size, (255, 255, 255, 255))
+    Image.alpha_composite(background, image).convert("RGB").save(image_path)
+
+
 def resize_images_to_same_sizes(
     expected_image_path: str | pathlib.Path,
     actual_image_path: str | pathlib.Path,
