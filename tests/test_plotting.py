@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Literal
 
 import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -1311,19 +1312,21 @@ class TestHeatmapReturns:
         assert df is None
 
 
+def _run_gene_trends(adata: AnnData, model, genes, **kwargs):
+    """Render gene trends and return the :class:`~matplotlib.figure.Figure` for introspection."""
+    kwargs.setdefault("time_key", "latent_time")
+    kwargs.setdefault("data_key", "Ms")
+    return cr.pl.gene_trends(adata, model, genes, dpi=DPI, return_figure=True, **kwargs)
+
+
 def _gene_trends_fig(adata: AnnData, **kwargs):
-    """Render a single-panel gene-trend figure and return it for introspection."""
-    model = create_model(adata)
-    return cr.pl.gene_trends(
-        adata,
-        model,
-        GENES[0],
-        time_key="latent_time",
-        data_key="Ms",
-        same_plot=True,
-        return_figure=True,
-        **kwargs,
-    )
+    """Render a single-panel gene-trend figure (one gene, all lineages) for introspection."""
+    return _run_gene_trends(adata, create_model(adata), GENES[0], same_plot=True, **kwargs)
+
+
+def _trend_lines(ax):
+    """Return the fitted-trend lines of an axis (excludes short helper/legend lines)."""
+    return [ln for ln in ax.get_lines() if len(ln.get_xdata()) > 2]
 
 
 def _scatter_collection(ax):
@@ -1334,6 +1337,33 @@ def _scatter_collection(ax):
 
 def _has_legend(fig) -> bool:
     return bool(fig.legends) or any("Legend" in type(child).__name__ for ax in fig.axes for child in ax.get_children())
+
+
+# Failed-model topologies reused by the gene-trend smoke tests (partial fit failures).
+def _failed_one_gene(adata):
+    fm = create_failed_model(adata)
+    return {GENES[0]: fm, "*": fm.model}
+
+
+def _failed_one_lineage(adata):
+    fm = create_failed_model(adata)
+    return {g: {"0": fm, "*": fm.model} for g in GENES[:10]}
+
+
+def _failed_main_diagonal(adata):
+    fm = create_failed_model(adata)
+    return {g: {str(ln): fm.model, "*": fm} for ln, g in enumerate(GENES[:3])}
+
+
+def _failed_off_diagonal(adata):
+    fm = create_failed_model(adata)
+    return {g: {str(ln): fm.model, "*": fm} for ln, g in zip(range(3)[::-1], GENES[:3])}
+
+
+def _setup_del_latent_time(adata):
+    # ensure the model callback resolves the time key even when `latent_time` is absent
+    del adata.obs["latent_time"]
+    return create_model(adata), GENES[:10], {"same_plot": False, "time_key": "dpt_pseudotime"}
 
 
 def _estimator_fig(estimator, method: str, **kwargs):
@@ -1356,56 +1386,27 @@ class TestGeneTrend:
     @compare()
     def test_trends(self, adata: AnnData, fpath: str):
         model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:3],
-            time_key="latent_time",
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
-        )
+        cr.pl.gene_trends(adata, model, GENES[:3], time_key="latent_time", data_key="Ms", dpi=DPI, save=fpath)
 
     @compare(kind="bwd")
     def test_trends_bwd(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:3],
-            time_key="latent_time",
-            backward=True,
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
+            adata, model, GENES[:3], time_key="latent_time", backward=True, data_key="Ms", dpi=DPI, save=fpath
         )
 
     @compare()
     def test_trends_same_plot(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:3],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            dpi=DPI,
-            save=fpath,
+            adata, model, GENES[:3], time_key="latent_time", data_key="Ms", same_plot=True, dpi=DPI, save=fpath
         )
 
     @compare()
     def test_transpose(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:4],
-            transpose=True,
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
+            adata, model, GENES[:4], transpose=True, data_key="Ms", time_key="latent_time", dpi=DPI, save=fpath
         )
 
     @compare()
@@ -1472,6 +1473,18 @@ class TestGeneTrend:
                 lambda fig: not _has_legend(fig),
                 id="no_legend",
             ),
+            pytest.param(
+                {"lineage_cmap": cm.Set2},
+                lambda fig: (
+                    mcolors.to_hex(_trend_lines(fig.axes[0])[0].get_color()) == mcolors.to_hex(cm.Set2.colors[0])
+                ),
+                id="lineage_cmap",
+            ),
+            pytest.param(
+                {"cell_color": "red"},
+                lambda fig: mcolors.to_hex(_scatter_collection(fig.axes[0]).get_facecolor()[0]) == "#ff0000",
+                id="cell_color",
+            ),
         ],
     )
     def test_trends_knob(self, adata_gpcca_fwd, kwargs, check):
@@ -1479,18 +1492,139 @@ class TestGeneTrend:
         fig = _gene_trends_fig(adata, **kwargs)
         assert check(fig)
 
+    # --- behavior / data-path coverage: assert the call runs and produces a figure ---
+    @pytest.mark.parametrize(
+        "setup",
+        [
+            pytest.param(lambda a: (create_model(a), RAW_GENES[:5], {"data_key": "X", "use_raw": True}), id="raw"),
+            pytest.param(lambda a: (create_model(a), GENES[0], {"same_plot": True, "conf_int": False}), id="conf_int"),
+            pytest.param(lambda a: (create_model(a), GENES[:10], {"ncols": 3, "sharex": "all"}), id="sharex"),
+            pytest.param(lambda a: (create_model(a), GENES[:3], {"same_plot": False, "sharey": "all"}), id="sharey"),
+            pytest.param(
+                lambda a: (create_model(a), GENES[:10], {"same_plot": True, "gene_as_title": False, "sharex": "all"}),
+                id="gene_as_title",
+            ),
+            pytest.param(
+                lambda a: (create_model(a), GENES[:2], {"same_plot": True, "legend_loc": "bottom right out"}),
+                id="legend_out",
+            ),
+            pytest.param(lambda a: (create_model(a), GENES[0], {"same_plot": True, "cbar": False}), id="no_cbar"),
+            pytest.param(
+                lambda a: (create_model(a), GENES[0], {"same_plot": False, "fate_prob_cmap": cm.inferno}),
+                id="fate_prob_cmap",
+            ),
+            pytest.param(
+                lambda a: (create_model(a), GENES[0], {"same_plot": True, "lineage_alpha": 1}), id="lineage_alpha"
+            ),
+            pytest.param(lambda a: (create_model(a), GENES[0], {"same_plot": True, "margins": 0.2}), id="margins"),
+            pytest.param(
+                lambda a: (create_model(a), GENES[0], {"same_plot": True, "cell_color": a.var_names[0]}),
+                id="cell_color_gene",
+            ),
+            pytest.param(
+                lambda a: (create_model(a), GENES[0], {"same_plot": True, "cell_color": "clusters"}),
+                id="cell_color_clusters",
+            ),
+            pytest.param(
+                lambda a: (
+                    create_model(a),
+                    GENES[0],
+                    {"same_plot": True, "cell_color": "clusters", "obs_legend_loc": "top left out"},
+                ),
+                id="cell_color_clusters_legend",
+            ),
+            pytest.param(
+                lambda a: (create_model(a), GENES[:10], {"same_plot": False, "time_range": (0, 0.5)}), id="time_range"
+            ),
+            pytest.param(lambda a: (create_model(a), GENES[:10], {"same_plot": False, "perc": (0, 50)}), id="perc"),
+            pytest.param(
+                lambda a: (
+                    create_model(a),
+                    GENES[:3],
+                    {"same_plot": False, "figsize": (5, 5), "perc": [(0, 50), (5, 95), (50, 100)]},
+                ),
+                id="perc_per_lineage",
+            ),
+            pytest.param(
+                lambda a: (create_model(a), GENES[:10], {"same_plot": False, "time_key": "dpt_pseudotime"}),
+                id="time_key_dpt",
+            ),
+            pytest.param(_setup_del_latent_time, id="time_key_del_latent_time"),
+            pytest.param(
+                lambda a: (
+                    create_model(a),
+                    GENES[:5],
+                    {"same_plot": True, "transpose": False, "plot_kwargs": {"lineage_probability": True}},
+                ),
+                id="show_lineage_no_transpose",
+            ),
+            pytest.param(
+                lambda a: (
+                    create_model(a),
+                    GENES[0],
+                    {
+                        "same_plot": False,
+                        "transpose": True,
+                        "figsize": (5, 5),
+                        "plot_kwargs": {"lineage_probability": True},
+                    },
+                ),
+                id="show_lineage_diff_plot",
+            ),
+            pytest.param(
+                lambda a: (
+                    create_model(a),
+                    GENES[0],
+                    {
+                        "same_plot": True,
+                        "transpose": True,
+                        "plot_kwargs": {"lineage_probability": True, "lineage_probability_conf_int": True},
+                    },
+                ),
+                id="show_lineage_ci",
+            ),
+            pytest.param(
+                lambda a: (create_model(a), GENES[:3], {"same_plot": True, "transpose": True}), id="transpose_same_plot"
+            ),
+            pytest.param(
+                lambda a: (create_model(a), [f"{g}:gs" for g in GENES[:3]], {"gene_symbols": "symbol"}),
+                id="gene_symbols",
+            ),
+            pytest.param(
+                lambda a: (_failed_one_gene(a), GENES[:10], {"same_plot": True}), id="failed_1_gene_same_plot"
+            ),
+            pytest.param(lambda a: (_failed_one_lineage(a), GENES[:10], {}), id="failed_1_lineage"),
+            pytest.param(
+                lambda a: (_failed_main_diagonal(a), GENES[:3], {"lineages": ["0", "1", "2"]}), id="failed_main_diag"
+            ),
+            pytest.param(lambda a: (_failed_off_diagonal(a), GENES[:3], {}), id="failed_off_diag"),
+            pytest.param(
+                lambda a: (_failed_one_gene(a), GENES[:10], {"transpose": True}), id="transpose_failed_1_gene"
+            ),
+            pytest.param(
+                lambda a: (_failed_one_lineage(a), GENES[:10], {"transpose": True}), id="transpose_failed_1_lineage"
+            ),
+            pytest.param(
+                lambda a: (_failed_one_lineage(a), GENES[:10], {"transpose": True, "same_plot": True}),
+                id="transpose_failed_1_lineage_same_plot",
+            ),
+            pytest.param(
+                lambda a: (_failed_off_diagonal(a), GENES[:3], {"transpose": True}), id="transpose_failed_off_diag"
+            ),
+        ],
+    )
+    def test_trends_runs(self, adata_gpcca_fwd, setup):
+        adata, _ = adata_gpcca_fwd
+        model, genes, kwargs = setup(adata)
+        fig = _run_gene_trends(adata, model, genes, **kwargs)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
     # --- behavior / error contracts ---
     def test_invalid_time_key(self, adata_cflare: AnnData):
         model = create_model(adata_cflare)
         with pytest.raises(KeyError, match=r"Fatal model"):
-            cr.pl.gene_trends(
-                adata_cflare,
-                model,
-                GENES[:10],
-                data_key="Ms",
-                same_plot=False,
-                time_key="foobar",
-            )
+            cr.pl.gene_trends(adata_cflare, model, GENES[:10], data_key="Ms", same_plot=False, time_key="foobar")
 
     def test_all_models_failed(self, adata_cflare: AnnData):
         fm = create_failed_model(adata_cflare)
@@ -1710,6 +1844,50 @@ class TestGPCCA:
         with_cbar = _estimator_fig(g, "plot_coarse_T", show_cbar=True)
         without_cbar = _estimator_fig(g, "plot_coarse_T", show_cbar=False)
         assert len(with_cbar.axes) == len(without_cbar.axes) + 1
+
+    # --- behavior coverage: assert the call runs and produces a figure ---
+    @pytest.mark.parametrize(
+        ("method", "kwargs"),
+        [
+            pytest.param("plot_spectrum", {"real_only": True, "show_eigengap": False}, id="spectrum_no_eigengap"),
+            pytest.param("plot_spectrum", {"n": 2, "real_only": True}, id="spectrum_evals"),
+            pytest.param("plot_spectrum", {"n": 2, "real_only": False}, id="spectrum_evals_complex"),
+            pytest.param(
+                "plot_coarse_T", {"show_initial_dist": False, "show_stationary_dist": True}, id="coarse_T_stat"
+            ),
+            pytest.param(
+                "plot_coarse_T", {"show_initial_dist": True, "show_stationary_dist": False}, id="coarse_T_init"
+            ),
+            pytest.param("plot_coarse_T", {"annotate": False}, id="coarse_T_no_annot"),
+            pytest.param("plot_coarse_T", {"xtick_rotation": 0}, id="coarse_T_xtick_rot"),
+            pytest.param("plot_coarse_T", {"order": None}, id="coarse_T_no_order"),
+            pytest.param("plot_macrostates", {"which": "all", "states": ["0"]}, id="meta_states_lineages"),
+            pytest.param("plot_macrostates", {"which": "all", "color": "clusters"}, id="meta_states_cluster_key"),
+            pytest.param(
+                "plot_macrostates", {"which": "all", "cmap": cm.inferno, "same_plot": False}, id="meta_states_cmap"
+            ),
+            pytest.param("plot_macrostates", {"which": "terminal", "states": ["0"]}, id="final_states_lineages"),
+            pytest.param("plot_macrostates", {"which": "terminal", "discrete": True}, id="final_states_discrete"),
+            pytest.param("plot_macrostates", {"which": "terminal", "color": "clusters"}, id="final_states_cluster_key"),
+            pytest.param("plot_macrostates", {"which": "terminal", "same_plot": False}, id="final_states_no_same_plot"),
+            pytest.param(
+                "plot_macrostates",
+                {"which": "terminal", "cmap": cm.inferno, "same_plot": False},
+                id="final_states_cmap",
+            ),
+            pytest.param("plot_macrostates", {"which": "terminal", "mode": "time"}, id="final_states_time"),
+            pytest.param(
+                "plot_fate_probabilities", {"color": "clusters", "same_plot": True}, id="fate_probs_same_clusters"
+            ),
+            pytest.param(
+                "plot_fate_probabilities", {"color": "clusters", "same_plot": False}, id="fate_probs_not_same"
+            ),
+        ],
+    )
+    def test_gpcca_runs(self, adata_gpcca_fwd, method, kwargs):
+        _, g = adata_gpcca_fwd
+        fig = _estimator_fig(g, method, **kwargs)
+        assert fig.axes
 
 
 class TestLineage:
