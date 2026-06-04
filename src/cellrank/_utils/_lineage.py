@@ -1204,4 +1204,4 @@ def _write_lineage(
     _writer: Any,
     dataset_kwargs: Mapping[str, Any] = types.MappingProxyType({}),
 ) -> None:
-    write_basic(f, k, elem=elem.X, _writer=_writer, dataset_kwargs=dataset_kwargs)
+    write_basic(f, k, elem.X, _writer=_writer, dataset_kwargs=dataset_kwargs)
