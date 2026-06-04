@@ -328,6 +328,13 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
                 raise ValueError("Expected `stability_threshold != None` for `method='stability'`.")
             stability = pd.Series(np.diag(coarse_T), index=coarse_T.columns)
             names = stability[stability.values >= stability_threshold].index
+            if not len(names):
+                raise ValueError(
+                    f"No macrostate has a stability `>= {stability_threshold}` "
+                    f"(maximum stability is `{stability.max():.4f}`), so no terminal states could be selected. "
+                    f"Decrease `stability_threshold`, use a different `method` (e.g. `'top_n'`), "
+                    f"or recompute the macrostates with `.compute_macrostates()`."
+                )
             return self.set_terminal_states(
                 names,
                 n_cells=n_cells,

@@ -692,7 +692,7 @@ class TestGPCCA:
         mc.compute_schur(n_components=10, method="krylov")
 
         mc.compute_macrostates(n_states=2)
-        with pytest.raises(ValueError, match=r"No macrostates"):
+        with pytest.raises(ValueError, match=r"No macrostate has a stability"):
             mc.predict(n_cells=5, method="stability", stability_threshold=42)
 
     def test_compute_terminal_states_too_many_cells(self, adata_large: AnnData):
