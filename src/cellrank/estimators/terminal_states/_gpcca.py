@@ -421,7 +421,14 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
         stat_dist = self.coarse_stationary_distribution
         if stat_dist is None:
-            raise RuntimeError("No coarse-grained stationary distribution found.")
+            raise RuntimeError(
+                "Unable to predict initial states because no coarse-grained stationary distribution is "
+                "available. It could not be computed because the stationary distribution of the transition "
+                "matrix could not be calculated, which typically happens for very large or (nearly) reducible "
+                "transition matrices where the underlying solver fails to converge. Initial state prediction "
+                "relies on this distribution, so it cannot be done automatically here. Set the initial states "
+                "manually using `.set_initial_states()` instead."
+            )
 
         states = list(stat_dist.iloc[np.argsort(stat_dist)][:n_states].index)
         return self.set_initial_states(states, n_cells=n_cells, allow_overlap=allow_overlap)
@@ -1485,6 +1492,14 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             init_dist = pd.Series(g.coarse_grained_input_distribution, index=names)
             if g.coarse_grained_stationary_probability is None:
                 stat_dist = None
+                logger.warning(
+                    "Unable to compute the coarse-grained stationary distribution because the stationary "
+                    "distribution of the transition matrix could not be calculated. This typically happens "
+                    "for very large or (nearly) reducible transition matrices, where the underlying solver "
+                    "fails to converge. Automatic initial state prediction via `.predict_initial_states()` "
+                    "will not be available; set the initial states manually using `.set_initial_states()` "
+                    "instead"
+                )
             else:
                 stat_dist = pd.Series(g.coarse_grained_stationary_probability, index=names)
             dists = pd.DataFrame({"coarse_init_dist": init_dist}, index=names)
