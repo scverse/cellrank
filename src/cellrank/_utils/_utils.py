@@ -7,7 +7,7 @@ import os
 import time as _time
 import types
 import warnings
-from collections.abc import Callable, Hashable, Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, Literal, TypeVar
 
 import networkx as nx
@@ -1570,3 +1570,60 @@ def _genesymbols(wrapped: Callable[..., Any], instance: Any, args: Any, kwargs: 
         use_raw=kwargs.get("use_raw", False),
     ):
         return wrapped(*args, **kwargs)
+
+
+def _resolve_composition_key(key: str | Mapping[str, str]) -> tuple[str, str]:
+    """Resolve ``key`` to a ``(source, name)`` pair, where ``source`` is ``'obs'`` or ``'obsm'``.
+
+    Accepts a bare :class:`str` (interpreted as an :attr:`~anndata.AnnData.obs` column) or a
+    single-entry mapping ``{"obs": <column>}`` / ``{"obsm": <key>}``. Used by both
+    :meth:`~cellrank.estimators.GPCCA.plot_macrostate_composition` and macrostate naming so
+    the obs/obsm convention stays single-sourced.
+    """
+    if isinstance(key, str):
+        return "obs", key
+    if isinstance(key, Mapping):
+        if len(key) != 1:
+            raise ValueError(f"Expected `key` to have exactly one entry, found `{len(key)}`.")
+        ((source, name),) = key.items()
+        if source not in ("obs", "obsm"):
+            raise ValueError(f"Expected `key` to use `'obs'` or `'obsm'`, found `{source!r}`.")
+        return source, name
+    raise TypeError(f"Expected `key` to be a `str` or a `dict`, found `{type(key).__name__!r}`.")
+
+
+def _obsm_proportions(adata: AnnData, key: str) -> pd.DataFrame:
+    """Fetch an :attr:`~anndata.AnnData.obsm` proportion frame, aligned positionally to ``obs_names``.
+
+    The frame's own index is ignored; rows are realigned to ``adata.obs_names`` by position.
+    Row-sum validation is left to the caller, which validates only the rows it actually uses.
+    """
+    if key not in adata.obsm:
+        raise KeyError(f"Data not found in `adata.obsm[{key!r}]`.")
+    fractions = adata.obsm[key]
+    if not isinstance(fractions, pd.DataFrame):
+        raise TypeError(
+            f"Expected `adata.obsm[{key!r}]` to be a `pandas.DataFrame`, found `{type(fractions).__name__}`."
+        )
+    # align to obs_names positionally, ignoring whatever index the frame carries
+    return pd.DataFrame(fractions.to_numpy(), index=adata.obs_names, columns=fractions.columns)
+
+
+def _check_proportions(fractions: pd.DataFrame, key: str, atol: float = 1e-3) -> None:
+    """Check that the rows of a proportion frame sum to :math:`1` within ``atol``."""
+    row_sums = fractions.to_numpy().sum(axis=1)
+    if not np.allclose(row_sums, 1.0, atol=atol):
+        raise ValueError(f"Expected rows of `adata.obsm[{key!r}]` to be proportions summing to `1`.")
+
+
+def _obsm_proportion_weights(adata: AnnData, weight_key: str | None, index: pd.Index) -> np.ndarray:
+    """Resolve per-observation weights for an obsm proportion frame.
+
+    Returns ones if ``weight_key`` is :obj:`None`, otherwise the values of
+    ``adata.obs[weight_key]`` aligned to ``index`` (e.g. the number of cells per sample).
+    """
+    if weight_key is None:
+        return np.ones(len(index), dtype=float)
+    if weight_key not in adata.obs:
+        raise KeyError(f"Weights not found in `adata.obs[{weight_key!r}]`.")
+    return adata.obs.loc[index, weight_key].to_numpy(dtype=float)

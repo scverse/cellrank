@@ -220,6 +220,122 @@ def _map_names_and_colors(
         association_df.loc[cl] = row
     association_df = association_df.apply(pd.to_numeric)
 
+    return _names_and_colors_from_association(
+        association_df=association_df,
+        cats_reference=cats_reference,
+        colors_reference=colors_reference if process_colors else None,
+        en_cutoff=en_cutoff,
+    )
+
+
+def _map_names_and_colors_from_proportions(
+    proportions: pd.DataFrame,
+    series_query: pd.Series,
+    weights: np.ndarray | None = None,
+    colors_reference: np.ndarray | None = None,
+    en_cutoff: float | None = None,
+) -> pd.Series | tuple[pd.Series, list[Any]]:
+    """Map names and colors from per-observation proportions onto a query.
+
+    This is the soft-assignment analog of :func:`_map_names_and_colors`. Instead of counting
+    how many of each query category's observations fall into each reference category, it sums
+    the (optionally weighted) proportion rows per query category. For one-hot ``proportions``
+    and unit ``weights`` it reduces exactly to :func:`_map_names_and_colors`.
+
+    Parameters
+    ----------
+    proportions
+        Per-observation proportions, aligned to ``series_query.index``. Columns are the
+        reference categories; each row sums to :math:`1`.
+    series_query
+        Series for which we would like to query the category names. Observations not assigned
+        to any query category (i.e. :obj:`NaN`) are ignored.
+    weights
+        Optional per-observation weights aligned to ``series_query``. If :obj:`None`, every
+        observation contributes equally.
+    colors_reference
+        If given, colors for the query categories are pulled from this color array.
+    en_cutoff
+        See :func:`_map_names_and_colors`.
+
+    Returns
+    -------
+    Series with updated category names and a corresponding array of colors.
+    """
+    if not isinstance(series_query.dtype, pd.CategoricalDtype):
+        raise TypeError(f"Query series must be `categorical`, found `{infer_dtype(series_query)}`.")
+    if len(proportions) != len(series_query):
+        raise ValueError(
+            f"Expected the proportions and query to have the same length, "
+            f"found `{len(proportions)}`, `{len(series_query)}`."
+        )
+    if en_cutoff is not None and en_cutoff < 0:
+        raise ValueError(f"Expected entropy cutoff to be non-negative, found `{en_cutoff}`.")
+
+    process_colors = colors_reference is not None
+
+    if not len(series_query):
+        res = pd.Series([], dtype="category")
+        return (res, []) if process_colors else res
+
+    cats_reference = proportions.columns
+    if process_colors:
+        if len(colors_reference) < len(cats_reference):
+            raise ValueError(
+                f"Length of reference colors `{len(colors_reference)}` is smaller than "
+                f"length of reference categories `{len(cats_reference)}`."
+            )
+        colors_reference = colors_reference[: len(cats_reference)]
+        if not all(colors.is_color_like(c) for c in colors_reference):
+            raise ValueError("Not all values are valid colors.")
+        if len(set(colors_reference)) != len(colors_reference):
+            logger.warning("Color sequence contains non-unique elements")
+
+    if weights is None:
+        weights = np.ones(len(series_query), dtype=float)
+    weights = np.asarray(weights, dtype=float)
+
+    # create dataframe to store the associations between reference and query
+    cats_query = series_query.cat.categories
+    weighted = proportions.to_numpy(dtype=float) * weights[:, None]
+    association_df = pd.DataFrame(0.0, index=cats_query, columns=cats_reference)
+
+    # populate the dataframe - sum the (weighted) proportion rows per query category
+    for cl in cats_query:
+        mask = np.asarray(series_query == cl)
+        if mask.any():
+            association_df.loc[cl] = weighted[mask].sum(axis=0)
+    association_df = association_df.apply(pd.to_numeric)
+
+    return _names_and_colors_from_association(
+        association_df=association_df,
+        cats_reference=cats_reference,
+        colors_reference=colors_reference if process_colors else None,
+        en_cutoff=en_cutoff,
+    )
+
+
+def _names_and_colors_from_association(
+    association_df: pd.DataFrame,
+    cats_reference: pd.Index,
+    colors_reference: np.ndarray | None = None,
+    en_cutoff: float | None = None,
+) -> pd.Series | tuple[pd.Series, list[Any]]:
+    """Turn a query-by-reference association table into unique names and colors.
+
+    Shared tail of :func:`_map_names_and_colors` and :func:`_map_names_and_colors_from_proportions`.
+    ``association_df`` is indexed by the query categories with one column per reference category;
+    each query category is named after the reference category with the largest association, then
+    duplicate names are made unique with ``_1, _2, ...`` suffixes (and colors shifted to match).
+    """
+    process_colors = colors_reference is not None
+
+    # the helper appends bookkeeping columns ("name"/"color"/"entropy"); a categorical column
+    # index (e.g. from `pd.get_dummies` of a categorical) would reject those, so normalize it
+    if isinstance(association_df.columns, pd.CategoricalIndex):
+        association_df = association_df.copy()
+        association_df.columns = association_df.columns.tolist()
+
     # find the mapping which maximizes overlap
     names_query = association_df.T.idxmax()
     if en_cutoff is not None:

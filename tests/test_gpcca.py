@@ -1173,3 +1173,125 @@ class TestGPCCAIO:
         out, _ = capsys.readouterr()
 
         assert not len(out)
+
+
+def _gpcca_with_schur(adata: AnnData, *, backward: bool = False) -> cr.estimators.GPCCA:
+    vk = VelocityKernel(adata, backward=backward).compute_transition_matrix(softmax_scale=4)
+    ck = ConnectivityKernel(adata).compute_transition_matrix()
+    mc = cr.estimators.GPCCA(0.8 * vk + 0.2 * ck)
+    mc.compute_schur(n_components=10, method="krylov")
+    return mc
+
+
+class TestComputeMacrostatesObsmNaming:
+    def test_obsm_onehot_matches_obs(self, adata_large: AnnData):
+        # one-hot `.obsm` proportions reproduce the `.obs` categorical naming and colors exactly
+        adata_large.obsm["clusters"] = pd.get_dummies(adata_large.obs["clusters"]).astype(float)
+        key = Key.uns.colors(Key.obs.macrostates(False))
+
+        mc = _gpcca_with_schur(adata_large)
+        mc.compute_macrostates(n_states=3, cluster_key="clusters")
+        names_obs = list(mc.macrostates.cat.categories)
+        colors_obs = list(mc.adata.uns[key])
+        codes_obs = mc.macrostates.cat.codes.to_numpy()
+
+        mc.compute_macrostates(n_states=3, cluster_key={"obsm": "clusters"})
+        names_obsm = list(mc.macrostates.cat.categories)
+        colors_obsm = list(mc.adata.uns[key])
+        codes_obsm = mc.macrostates.cat.codes.to_numpy()
+
+        assert names_obsm == names_obs
+        assert colors_obsm == colors_obs
+        np.testing.assert_array_equal(codes_obsm, codes_obs)
+
+    def test_obs_dict_matches_str(self, adata_large: AnnData):
+        key = Key.uns.colors(Key.obs.macrostates(False))
+
+        mc = _gpcca_with_schur(adata_large)
+        mc.compute_macrostates(n_states=3, cluster_key="clusters")
+        names_str = list(mc.macrostates.cat.categories)
+        colors_str = list(mc.adata.uns[key])
+
+        mc.compute_macrostates(n_states=3, cluster_key={"obs": "clusters"})
+
+        assert list(mc.macrostates.cat.categories) == names_str
+        assert list(mc.adata.uns[key]) == colors_str
+
+    def test_obsm_proportions_positional_alignment(self):
+        # `_obsm_proportions` realigns rows to `obs_names` by position, ignoring the frame's own index
+        from types import SimpleNamespace
+
+        from cellrank._utils._utils import _obsm_proportions
+
+        obs_names = pd.Index(["c0", "c1", "c2"])
+        df = pd.DataFrame({"a": [1.0, 0.0, 0.5], "b": [0.0, 1.0, 0.5]}, index=["z", "y", "x"])
+        stub = SimpleNamespace(obsm={"frac": df}, obs_names=obs_names)
+
+        out = _obsm_proportions(stub, "frac")
+
+        assert list(out.index) == list(obs_names)
+        assert list(out.columns) == ["a", "b"]
+        np.testing.assert_array_equal(out.to_numpy(), df.to_numpy())
+
+    def test_obsm_weighted_runs(self, adata_large: AnnData):
+        adata_large.obsm["clusters"] = pd.get_dummies(adata_large.obs["clusters"]).astype(float)
+        adata_large.obs["n_cells"] = np.arange(1, adata_large.n_obs + 1, dtype=float)
+
+        mc = _gpcca_with_schur(adata_large)
+        mc.compute_macrostates(n_states=3, cluster_key={"obsm": "clusters"}, weight_key="n_cells")
+
+        reference = set(adata_large.obs["clusters"].cat.categories)
+        # names are drawn from the reference categories (modulo `_1/_2` dedup suffixes)
+        for name in mc.macrostates.cat.categories:
+            assert name.rsplit("_", 1)[0] in reference or name in reference
+
+    def test_obsm_one_state(self, adata_large: AnnData):
+        adata_large.obsm["clusters"] = pd.get_dummies(adata_large.obs["clusters"]).astype(float)
+
+        mc = _gpcca_with_schur(adata_large)
+        mc.compute_macrostates(n_states=1, cluster_key={"obsm": "clusters"})
+
+        assert mc.macrostates is not None
+        assert len(mc.macrostates.cat.categories) == 1
+
+    def test_obsm_missing_key(self, adata_large: AnnData):
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(KeyError, match=r"adata.obsm\['missing'\]"):
+            mc.compute_macrostates(n_states=2, cluster_key={"obsm": "missing"})
+
+    def test_obsm_not_a_dataframe(self, adata_large: AnnData):
+        adata_large.obsm["bad"] = np.zeros((adata_large.n_obs, 3))
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(TypeError, match=r"pandas.DataFrame"):
+            mc.compute_macrostates(n_states=2, cluster_key={"obsm": "bad"})
+
+    def test_obsm_rows_not_proportions(self, adata_large: AnnData):
+        df = pd.get_dummies(adata_large.obs["clusters"]).astype(float)
+        df.iloc[:, 0] += 1.0  # rows no longer sum to 1
+        adata_large.obsm["clusters"] = df
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(ValueError, match=r"proportions summing to"):
+            mc.compute_macrostates(n_states=2, cluster_key={"obsm": "clusters"})
+
+    def test_weight_key_with_obs_source(self, adata_large: AnnData):
+        adata_large.obs["n_cells"] = np.ones(adata_large.n_obs, dtype=float)
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(ValueError, match=r"`weight_key` is only supported"):
+            mc.compute_macrostates(n_states=2, cluster_key="clusters", weight_key="n_cells")
+
+    def test_obsm_missing_weight_key(self, adata_large: AnnData):
+        adata_large.obsm["clusters"] = pd.get_dummies(adata_large.obs["clusters"]).astype(float)
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(KeyError, match=r"Weights not found"):
+            mc.compute_macrostates(n_states=2, cluster_key={"obsm": "clusters"}, weight_key="missing")
+
+    def test_invalid_dict_source(self, adata_large: AnnData):
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(ValueError, match=r"'obs'.* or .*'obsm'"):
+            mc.compute_macrostates(n_states=2, cluster_key={"varm": "clusters"})
+
+    def test_tsi_rejects_mapping(self, adata_large: AnnData):
+        adata_large.obsm["clusters"] = pd.get_dummies(adata_large.obs["clusters"]).astype(float)
+        mc = _gpcca_with_schur(adata_large)
+        with pytest.raises(TypeError, match=r"`cluster_key` to be a `str` or `None`"):
+            mc.tsi(n_macrostates=2, terminal_states=["Granule mature"], cluster_key={"obsm": "clusters"})

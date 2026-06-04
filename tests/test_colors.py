@@ -3,7 +3,11 @@ import pandas as pd
 import pytest
 from matplotlib.colors import is_color_like
 
-from cellrank._utils._colors import _create_categorical_colors, _map_names_and_colors
+from cellrank._utils._colors import (
+    _create_categorical_colors,
+    _map_names_and_colors,
+    _map_names_and_colors_from_proportions,
+)
 
 
 class TestColors:
@@ -230,3 +234,96 @@ class TestMappingColors:
         np.testing.assert_array_equal(res.values, expected.values)
         np.testing.assert_array_equal(res.index.values, expected_index.values)
         np.testing.assert_array_equal(res.cat.categories.values, res.values)
+
+
+class TestMappingColorsFromProportions:
+    def test_proportions_not_categorical_query(self):
+        query = pd.Series(["x", "y", "z"], dtype="str")
+        proportions = pd.DataFrame({"a": [1.0, 0.0, 0.5], "b": [0.0, 1.0, 0.5]})
+
+        with pytest.raises(TypeError, match=r"Query series must be"):
+            _map_names_and_colors_from_proportions(proportions, query)
+
+    def test_proportions_length_mismatch(self):
+        query = pd.Series(["x", "y", "z"], dtype="category")
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+
+        with pytest.raises(ValueError, match=r"same length"):
+            _map_names_and_colors_from_proportions(proportions, query)
+
+    def test_proportions_negative_en_cutoff(self):
+        query = pd.Series(["x", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+
+        with pytest.raises(ValueError, match=r"entropy cutoff to be non-negative"):
+            _map_names_and_colors_from_proportions(proportions, query, en_cutoff=-1)
+
+    def test_proportions_too_few_colors(self):
+        query = pd.Series(["x", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+
+        with pytest.raises(ValueError, match=r"smaller than"):
+            _map_names_and_colors_from_proportions(proportions, query, colors_reference=["red"])
+
+    def test_proportions_empty(self):
+        query = pd.Series([], dtype="category")
+        proportions = pd.DataFrame({"a": [], "b": []})
+
+        r = _map_names_and_colors_from_proportions(proportions, query)
+
+        assert isinstance(r, pd.Series)
+        assert isinstance(r.dtype, pd.CategoricalDtype)
+
+    def test_proportions_onehot_matches_counts(self):
+        # one-hot proportions + unit weights reduce exactly to the hard-count mapping
+        reference = pd.Series(["a", "b", np.nan, "b", "a"], dtype="category")
+        query = pd.Series(["x", "x", np.nan, "y", "y"], dtype="category")
+        proportions = pd.get_dummies(reference).astype(float)
+        colors = ["red", "green"]
+
+        names_ref, colors_ref = _map_names_and_colors(reference, query, colors_reference=colors)
+        names_prop, colors_prop = _map_names_and_colors_from_proportions(proportions, query, colors_reference=colors)
+
+        np.testing.assert_array_equal(names_prop.values, names_ref.values)
+        np.testing.assert_array_equal(names_prop.index.values, names_ref.index.values)
+        assert colors_prop == colors_ref
+
+    def test_proportions_dominant_category(self):
+        query = pd.Series(["x", "x", "y", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.9, 0.8, 0.1, 0.2], "b": [0.1, 0.2, 0.9, 0.8]})
+
+        names = _map_names_and_colors_from_proportions(proportions, query)
+
+        assert list(names.index) == ["x", "y"]
+        assert list(names.values) == ["a", "b"]
+
+    def test_proportions_ignores_nan_query(self):
+        # NaN query observations contribute to no category, like the hard-count path
+        query = pd.Series(["x", np.nan, "x"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.9, 0.0, 0.8], "b": [0.1, 1.0, 0.2]})
+
+        names = _map_names_and_colors_from_proportions(proportions, query)
+
+        assert list(names.index) == ["x"]
+        assert list(names.values) == ["a"]
+
+    def test_proportions_weighting_changes_name(self):
+        query = pd.Series(["x", "x"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.6, 0.2], "b": [0.4, 0.8]})
+
+        # unweighted: a=0.8, b=1.2 -> dominant is b
+        names_unw = _map_names_and_colors_from_proportions(proportions, query)
+        assert list(names_unw.values) == ["b"]
+
+        # weighting the first row heavily: a=6.2, b=4.8 -> dominant is a
+        names_w = _map_names_and_colors_from_proportions(proportions, query, weights=np.array([10.0, 1.0]))
+        assert list(names_w.values) == ["a"]
+
+    def test_proportions_duplicate_dominant_deduped(self):
+        query = pd.Series(["x", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.9, 0.8], "b": [0.1, 0.2]})
+
+        names, colors = _map_names_and_colors_from_proportions(proportions, query, colors_reference=["red", "green"])
+
+        assert list(names.values) == ["a_1", "a_2"]
+        assert colors[0] != colors[1]
