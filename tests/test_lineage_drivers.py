@@ -7,6 +7,12 @@ from cellrank._utils._key import Key
 from cellrank.estimators import GPCCA
 
 
+def _to_dense(X) -> np.ndarray:
+    """Return a fresh, owned dense ``float64`` copy (never an in-place view of ``X``)."""
+    X = X.toarray() if sp.issparse(X) else X
+    return np.array(X, dtype=np.float64, copy=True)
+
+
 class TestLineageDrivers:
     @pytest.mark.parametrize("use_raw", [False, True])
     def test_normal_run(self, g: GPCCA, use_raw: bool):
@@ -96,18 +102,22 @@ class TestLineageDrivers:
             g.compute_lineage_drivers(nan_policy="foobar")
 
     def test_nan_policy_omit_matches_propagate_without_nans(self, g: GPCCA):
-        g.adata.X = np.asarray(g.adata.X.toarray() if sp.issparse(g.adata.X) else g.adata.X, dtype=np.float64)
+        # `deep=True` isolates `adata` so mutating `.X` doesn't leak into the shared fixture
+        g = g.copy(deep=True)
+        g.adata.X = _to_dense(g.adata.X)
 
         res_propagate = g.compute_lineage_drivers(nan_policy="propagate")
         res_omit = g.compute_lineage_drivers(nan_policy="omit")
 
-        np.testing.assert_array_equal(res_propagate.index, res_omit.index)
+        np.testing.assert_array_equal(sorted(res_propagate.index), sorted(res_omit.index))
         np.testing.assert_array_equal(res_propagate.columns, res_omit.columns)
-        np.testing.assert_allclose(res_propagate.values, res_omit.values)
+        # tiny FP differences in the masked matmuls can reorder near-tied genes, so align on the index
+        np.testing.assert_allclose(res_propagate.values, res_omit.loc[res_propagate.index].values, atol=1e-8)
 
     def test_nan_policy_omit_handles_missing_values(self, g: GPCCA):
+        g = g.copy(deep=True)
         names = g.fate_probabilities.names
-        X = np.asarray(g.adata.X.toarray() if sp.issparse(g.adata.X) else g.adata.X, dtype=np.float64)
+        X = _to_dense(g.adata.X)
         rng = np.random.default_rng(0)
         # introduce missing values into the expression matrix
         X[rng.random(X.shape) < 0.1] = np.nan
@@ -128,11 +138,13 @@ class TestLineageDrivers:
             assert np.all(valid <= 1.0)
 
     def test_nan_policy_omit_sparse_raises(self, g: GPCCA):
+        g = g.copy(deep=True)
         g.adata.X = sp.csr_matrix(g.adata.X)
         with pytest.raises(NotImplementedError, match=r".*dense.*"):
             g.compute_lineage_drivers(nan_policy="omit")
 
     def test_nan_policy_omit_perm_test_raises(self, g: GPCCA):
-        g.adata.X = np.asarray(g.adata.X.toarray() if sp.issparse(g.adata.X) else g.adata.X, dtype=np.float64)
+        g = g.copy(deep=True)
+        g.adata.X = _to_dense(g.adata.X)
         with pytest.raises(NotImplementedError, match=r".*fisher.*"):
             g.compute_lineage_drivers(nan_policy="omit", method="perm_test", n_perms=10)
