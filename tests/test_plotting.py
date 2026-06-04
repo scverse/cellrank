@@ -1,5 +1,7 @@
 import os
 import pathlib
+import shutil
+import tempfile
 from collections.abc import Callable
 from typing import Literal
 
@@ -22,6 +24,7 @@ from cellrank.models import GAMR
 from tests._helpers import (
     create_failed_model,
     create_model,
+    flatten_onto_white,
     gamr_skip,
     resize_images_to_same_sizes,
     scvelo_skip,
@@ -70,7 +73,14 @@ def compare(
 ) -> Callable:
     def _compare_images(expected_path: str | pathlib.Path, actual_path: str | pathlib.Path) -> None:
         resize_images_to_same_sizes(expected_path, actual_path)
-        res = compare_images(expected_path, actual_path, tol=tol)
+        # Flatten transparency so the comparison only sees visible pixels (see
+        # `flatten_onto_white`). The actual image is regenerated each run, so flatten it in
+        # place; copy the committed baseline to a temporary file before flattening it.
+        flatten_onto_white(actual_path)
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+            shutil.copyfile(expected_path, tmp.name)
+            flatten_onto_white(tmp.name)
+            res = compare_images(tmp.name, actual_path, tol=tol)
         assert res is None, res
 
     def _prepare_fname(func: Callable) -> tuple[str, str]:
