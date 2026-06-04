@@ -318,6 +318,53 @@ def _mat_mat_corr_dense(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         return (X @ Y - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
 
 
+def _mat_mat_corr_dense_omit_nan(X: np.ndarray, Y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Compute pairwise correlations between rows of ``X`` and columns of ``Y``, omitting missing values.
+
+    For every ``(row, column)`` pair, only cells where *both* entries are finite contribute, mirroring
+    :func:`scipy.stats.pearsonr` with ``nan_policy='omit'``. The same population-standard-deviation convention as
+    :func:`_mat_mat_corr_dense` is used, so the result is identical to it when neither ``X`` nor ``Y`` contains
+    missing values.
+
+    Parameters
+    ----------
+    X
+        Array of `(M, N)` elements, may contain :obj:`~numpy.nan`.
+    Y
+        Array of `(N, K)` elements, may contain :obj:`~numpy.nan`.
+
+    Returns
+    -------
+    The `(M, K)` correlations and the `(M, K)` pairwise sample sizes (number of jointly non-missing cells).
+    """
+    mask_x = np.isfinite(X)  # genes x cells
+    mask_y = np.isfinite(Y)  # cells x lineages
+
+    # zero out missing entries so they don't contribute to the sums below
+    X0 = np.where(mask_x, X, 0.0)
+    Y0 = np.where(mask_y, Y, 0.0)
+    mask_x = mask_x.astype(X0.dtype)
+    mask_y = mask_y.astype(Y0.dtype)
+
+    # pairwise sums over the cells that are valid in both the gene and the lineage
+    n = mask_x @ mask_y  # number of jointly valid cells per (gene, lineage)
+    sum_x = X0 @ mask_y
+    sum_y = mask_x @ Y0
+    sum_xx = (X0 * X0) @ mask_y
+    sum_yy = mask_x @ (Y0 * Y0)
+    sum_xy = X0 @ Y0
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        X_bar = sum_x / n
+        y_bar = sum_y / n
+        X_std = np.sqrt(sum_xx / n - X_bar**2)
+        y_std = np.sqrt(sum_yy / n - y_bar**2)
+        corr = (sum_xy - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
+
+    return corr, n
+
+
 def _perm_test(
     ixs: np.ndarray,
     corr: np.ndarray,
@@ -360,6 +407,7 @@ def _correlation_test(
     confidence_level: float = 0.95,
     n_perms: int | None = None,
     seed: int | None = None,
+    nan_policy: Literal["propagate", "omit"] = "propagate",
     **kwargs: Any,
 ) -> pd.DataFrame:
     """Perform a statistical test.
@@ -382,6 +430,12 @@ def _correlation_test(
         Number of permutations if ``method = 'perm_test'``.
     seed
         Random seed if ``method = 'perm_test'``.
+    nan_policy
+        How to handle missing values (:obj:`~numpy.nan`) in ``X`` or ``Y``:
+
+        - ``'propagate'`` - missing values propagate to the result.
+        - ``'omit'`` - compute each correlation only over jointly non-missing cells. Only supported for dense ``X``
+          and ``method='fisher'``.
     %(parallel)s
 
     Returns
@@ -401,6 +455,7 @@ def _correlation_test(
         n_perms=n_perms,
         seed=seed,
         confidence_level=confidence_level,
+        nan_policy=nan_policy,
         **kwargs,
     )
     invalid = (corr < -1) | (corr > 1)
@@ -441,6 +496,7 @@ def _correlation_test_helper(
     n_perms: int | None = None,
     seed: int | None = None,
     confidence_level: float = 0.95,
+    nan_policy: Literal["propagate", "omit"] = "propagate",
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute the correlation between rows in matrix ``X`` columns of matrix ``Y``.
@@ -459,6 +515,12 @@ def _correlation_test_helper(
         Random seed if ``method = 'perm_test'``.
     confidence_level
         Confidence level for the confidence interval calculation. Must be in `[0, 1]`.
+    nan_policy
+        How to handle missing values (:obj:`~numpy.nan`) in ``X`` or ``Y``:
+
+        - ``'propagate'`` - missing values propagate to the result, as in :func:`numpy.matmul`.
+        - ``'omit'`` - compute each pairwise correlation only over the cells that are valid in both entries,
+          mirroring :func:`scipy.stats.pearsonr`. Only supported for dense ``X`` and ``method='fisher'``.
     kwargs
         Keyword arguments for :func:`cellrank._utils._parallelize.parallelize`.
 
@@ -479,6 +541,8 @@ def _correlation_test_helper(
 
     if not (0 <= confidence_level <= 1):
         raise ValueError(f"Expected `confidence_level` to be in interval `[0, 1]`, found `{confidence_level}`.")
+    if nan_policy not in ("propagate", "omit"):
+        raise ValueError(f"Expected `nan_policy` to be one of `['propagate', 'omit']`, found `{nan_policy!r}`.")
 
     n = X.shape[1]  # genes x cells
     ql = 1 - confidence_level - (1 - confidence_level) / 2.0
@@ -487,17 +551,33 @@ def _correlation_test_helper(
     if sp.issparse(X) and not sp.isspmatrix_csr(X):
         X = sp.csr_matrix(X)
 
-    corr = _mat_mat_corr_sparse(X, Y) if sp.issparse(X) else _mat_mat_corr_dense(X, Y)
+    if nan_policy == "omit":
+        if sp.issparse(X):
+            raise NotImplementedError(
+                "`nan_policy='omit'` is only supported for dense expression data. "
+                "Please densify the data, e.g. via `adata.X = adata.X.toarray()`, before computing drivers."
+            )
+        if method != TestMethod.FISHER:
+            raise NotImplementedError(
+                f"`nan_policy='omit'` is only supported with `method='fisher'`, found `method={method.value!r}`."
+            )
+        # `n` becomes a per-pair sample size (number of jointly non-missing cells)
+        corr, n = _mat_mat_corr_dense_omit_nan(X, Y)
+    else:
+        corr = _mat_mat_corr_sparse(X, Y) if sp.issparse(X) else _mat_mat_corr_dense(X, Y)
 
     if method == TestMethod.FISHER:
         # see: https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#Using_the_Fisher_transformation
-        mean, se = np.arctanh(corr), 1.0 / np.sqrt(n - 3)
-        z_score = (np.arctanh(corr) - np.arctanh(0)) * np.sqrt(n - 3)
+        # `n` may be a per-pair sample size when `nan_policy='omit'`; pairs with `n <= 3` yield `NaN`
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            mean, se = np.arctanh(corr), 1.0 / np.sqrt(n - 3)
+            z_score = (np.arctanh(corr) - np.arctanh(0)) * np.sqrt(n - 3)
 
-        z = st.norm.ppf(qh)
-        corr_ci_low = np.tanh(mean - z * se)
-        corr_ci_high = np.tanh(mean + z * se)
-        pvals = 2 * st.norm.cdf(-np.abs(z_score))
+            z = st.norm.ppf(qh)
+            corr_ci_low = np.tanh(mean - z * se)
+            corr_ci_high = np.tanh(mean + z * se)
+            pvals = 2 * st.norm.cdf(-np.abs(z_score))
 
     elif method == TestMethod.PERM_TEST:
         if not isinstance(n_perms, int):

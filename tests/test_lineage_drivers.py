@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import scipy.sparse as sp
 
 from cellrank._utils._key import Key
 from cellrank.estimators import GPCCA
@@ -89,3 +90,49 @@ class TestLineageDrivers:
         for name in ["0", "1"]:
             assert np.all(res_narrow[f"{name}_ci_low"] >= res_wide[f"{name}_ci_low"])
             assert np.all(res_narrow[f"{name}_ci_high"] <= res_wide[f"{name}_ci_high"])
+
+    def test_invalid_nan_policy(self, g: GPCCA):
+        with pytest.raises(ValueError, match=r".*nan_policy.*"):
+            g.compute_lineage_drivers(nan_policy="foobar")
+
+    def test_nan_policy_omit_matches_propagate_without_nans(self, g: GPCCA):
+        g.adata.X = np.asarray(g.adata.X.toarray() if sp.issparse(g.adata.X) else g.adata.X, dtype=np.float64)
+
+        res_propagate = g.compute_lineage_drivers(nan_policy="propagate")
+        res_omit = g.compute_lineage_drivers(nan_policy="omit")
+
+        np.testing.assert_array_equal(res_propagate.index, res_omit.index)
+        np.testing.assert_array_equal(res_propagate.columns, res_omit.columns)
+        np.testing.assert_allclose(res_propagate.values, res_omit.values)
+
+    def test_nan_policy_omit_handles_missing_values(self, g: GPCCA):
+        names = g.fate_probabilities.names
+        X = np.asarray(g.adata.X.toarray() if sp.issparse(g.adata.X) else g.adata.X, dtype=np.float64)
+        rng = np.random.default_rng(0)
+        # introduce missing values into the expression matrix
+        X[rng.random(X.shape) < 0.1] = np.nan
+        g.adata.X = X
+
+        # `propagate` lets the missing values contaminate every gene -> all correlations are NaN
+        res_propagate = g.compute_lineage_drivers(nan_policy="propagate")
+        for name in names:
+            assert res_propagate[f"{name}_corr"].isna().all()
+
+        # `omit` correlates over the jointly observed cells -> finite correlations within `[-1, 1]`
+        res_omit = g.compute_lineage_drivers(nan_policy="omit")
+        for name in names:
+            corr = res_omit[f"{name}_corr"]
+            assert corr.notna().any()
+            valid = corr.dropna()
+            assert np.all(valid >= -1.0)
+            assert np.all(valid <= 1.0)
+
+    def test_nan_policy_omit_sparse_raises(self, g: GPCCA):
+        g.adata.X = sp.csr_matrix(g.adata.X)
+        with pytest.raises(NotImplementedError, match=r".*dense.*"):
+            g.compute_lineage_drivers(nan_policy="omit")
+
+    def test_nan_policy_omit_perm_test_raises(self, g: GPCCA):
+        g.adata.X = np.asarray(g.adata.X.toarray() if sp.issparse(g.adata.X) else g.adata.X, dtype=np.float64)
+        with pytest.raises(NotImplementedError, match=r".*fisher.*"):
+            g.compute_lineage_drivers(nan_policy="omit", method="perm_test", n_perms=10)

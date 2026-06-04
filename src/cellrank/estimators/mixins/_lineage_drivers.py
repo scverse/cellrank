@@ -68,6 +68,7 @@ class LinDriversMixin(FateProbsMixin):
         confidence_level: float = 0.95,
         n_perms: int = 1000,
         seed: int | None = None,
+        nan_policy: Literal["propagate", "omit"] = "propagate",
         **kwargs: Any,
     ) -> pd.DataFrame:
         """Compute driver genes per lineage.
@@ -99,6 +100,13 @@ class LinDriversMixin(FateProbsMixin):
             Number of permutations to use when ``method = {tm.PERM_TEST!r}``.
         seed
             Random seed when ``method = {tm.PERM_TEST!r}``.
+        nan_policy
+            How to handle missing values (:obj:`~numpy.nan`) in the expression data. Valid options are:
+
+            - ``'propagate'`` - missing values propagate to the result.
+            - ``'omit'`` - correlate each gene and lineage only over the cells where both are non-missing,
+              akin to :func:`scipy.stats.pearsonr`. Only supported for dense expression data and
+              ``method = {tm.FISHER!r}``.
         %(parallel)s
         kwargs
             Keyword for the correlation test.
@@ -193,6 +201,7 @@ class LinDriversMixin(FateProbsMixin):
             n_perms=n_perms,
             seed=seed,
             confidence_level=confidence_level,
+            nan_policy=nan_policy,
             **kwargs,
         )
         params = self._create_params()
