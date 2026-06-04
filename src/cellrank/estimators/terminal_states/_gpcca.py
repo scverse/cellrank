@@ -176,13 +176,21 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             - ``{"obsm": <key>}``, where :attr:`adata.obsm[key] <anndata.AnnData.obsm>` is a
               :class:`~pandas.DataFrame` whose columns are the categories and whose rows are
               per-observation proportions summing to :math:`1` (e.g. cell-type or condition
-              fractions of aggregated samples). Each macrostate is named after the category with
-              the largest (weighted) summed proportion among its most-likely observations.
+              fractions of aggregated samples). For each macrostate, the proportion rows of its
+              most-likely observations are summed (see ``weight_key`` for the weighting) and the
+              macrostate is named after the category with the largest resulting total.
         weight_key
-            Only used when ``cluster_key`` points to :attr:`~anndata.AnnData.obsm`. Key from
-            :attr:`~anndata.AnnData.obs` with per-observation weights, e.g. the number of cells per
-            aggregated sample, so naming reflects cell-level rather than sample-level dominance.
-            If :obj:`None`, each observation contributes equally.
+            Only used when ``cluster_key`` points to :attr:`~anndata.AnnData.obsm`. Controls how
+            each observation's proportion row is weighted when summing proportions to pick a
+            macrostate's dominant category:
+
+            - :obj:`None` (default) - **every observation contributes equally**, irrespective of
+              how many cells it represents. Each sample's proportion row is added with weight
+              :math:`1`, so naming reflects *sample-level* dominance.
+            - a key in :attr:`~anndata.AnnData.obs` - each observation's proportion row is scaled
+              by ``adata.obs[weight_key]`` (e.g. the number of cells per aggregated sample) before
+              summing, so samples with more cells count proportionally more and naming reflects
+              *cell-level* dominance.
         kwargs
             Keyword arguments for :meth:`compute_schur`.
 

@@ -1619,8 +1619,9 @@ def _check_proportions(fractions: pd.DataFrame, key: str, atol: float = 1e-3) ->
 def _obsm_proportion_weights(adata: AnnData, weight_key: str | None, index: pd.Index) -> np.ndarray:
     """Resolve per-observation weights for an obsm proportion frame.
 
-    Returns ones if ``weight_key`` is :obj:`None`, otherwise the values of
-    ``adata.obs[weight_key]`` aligned to ``index`` (e.g. the number of cells per sample).
+    If ``weight_key`` is :obj:`None`, every observation is weighted equally (``1.0``), regardless
+    of how many cells it represents. Otherwise each observation is weighted by
+    ``adata.obs[weight_key]`` aligned to ``index`` (e.g. the number of cells per aggregated sample).
     """
     if weight_key is None:
         return np.ones(len(index), dtype=float)
