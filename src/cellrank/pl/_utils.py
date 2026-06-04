@@ -23,7 +23,7 @@ from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND
 from cellrank._utils._parallelize import parallelize
 from cellrank._utils._utils import _unique_order_preserving, save_fig
-from cellrank.models import GAMR, BaseModel, FailedModel, SKLearnModel
+from cellrank.models import GAMR, BaseModel, FailedModel, FittedModel, SKLearnModel
 from cellrank.models._base_model import ColorType
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,32 @@ def _is_any_gam_mgcv(models: BaseModel | dict[str, dict[str, BaseModel]]) -> boo
     return isinstance(models, GAMR) or (
         isinstance(models, dict) and any(isinstance(m, GAMR) for ms in models.values() for m in ms.values())
     )
+
+
+def _copy_or_reuse_model(model: BaseModel) -> BaseModel:
+    """Copy a gene- and lineage-specific model template, or reuse it if it is already fitted.
+
+    A model that has already been prepared and fitted - e.g. one returned by a plotting function with
+    ``return_models=True`` - is turned into a :class:`~cellrank.models.FittedModel` so that its smoothed
+    values are reused instead of being recomputed. Unfitted models are copied as before, to be fitted afresh.
+
+    This must only be used for models bound to a specific gene *and* lineage; reusing a fitted model that
+    is shared across several lineages (e.g. via a ``'*'`` fallback) would apply one lineage's trend to others.
+
+    Parameters
+    ----------
+    model
+        Model to copy or reuse.
+
+    Returns
+    -------
+    The copied or reused model.
+    """
+    if isinstance(model, FittedModel):
+        return model.copy()
+    if getattr(model, "prepared", False) and model.y_test is not None:
+        return FittedModel.from_model(model)
+    return copy.copy(model)
 
 
 def _create_models(model: _input_model_type, obs: Sequence[str], lineages: Sequence[str | None]) -> _return_model_type:
@@ -104,7 +130,9 @@ def _create_models(model: _input_model_type, obs: Sequence[str], lineages: Seque
                     f"Expected the model for gene `{obs_name!r}` and lineage `{lin_name!r}` "
                     f"to be of type `BaseModel`, found `{type(mod).__name__!r}`."
                 )
-            models[obs_name][lin_name] = copy.copy(mod)
+            # gene- and lineage-specific model: reuse it if already fitted (e.g. returned by a
+            # previous `return_models=True` call), otherwise copy the template to be fit afresh
+            models[obs_name][lin_name] = _copy_or_reuse_model(mod)
 
         if set(models[obs_name].keys()) & lineages == lineages:
             return
@@ -122,6 +150,8 @@ def _create_models(model: _input_model_type, obs: Sequence[str], lineages: Seque
         raise ValueError("No genes have been selected.")
 
     if isinstance(model, BaseModel):
+        # a single model is a template fit afresh for each gene; an already-fitted
+        # `FittedModel` is reused as-is via its `copy`, which preserves the smoothed values
         return {
             o: {lin: copy.copy(model) for lin in _unique_order_preserving(lineages)}
             for o in _unique_order_preserving(obs)

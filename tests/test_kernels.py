@@ -1212,6 +1212,27 @@ class TestRealTimeKernel:
             tgt_mask = (tmk.time == tgt).tolist()
             np.testing.assert_allclose(tmat[src_mask, :][:, tgt_mask].toarray(), expected[src, tgt])
 
+    def test_recompute_on_changed_conn_weight(self, adata_large: AnnData):
+        adata_large.obs["time"] = [0] * 50 + [1] * 50 + [2] * 50 + [3] * 50
+        adata_large.obs["time"] = col = adata_large.obs["time"].astype("category")
+        cats = col.cat.categories
+
+        rng = np.random.default_rng(0)
+        couplings = {}
+        for src, tgt in zip(cats[:-1], cats[1:]):
+            n, m = np.sum(col == src), np.sum(col == tgt)
+            couplings[src, tgt] = np.abs(rng.normal(size=(n, m)))
+
+        tmk = RealTimeKernel(adata_large, time_key="time", couplings=couplings)
+        tmk = tmk.compute_transition_matrix(self_transitions="all", conn_weight=0.2, threshold="auto")
+        old = tmk.transition_matrix.copy()
+
+        # changing only `conn_weight` must trigger a recomputation, not reuse the cache
+        tmk = tmk.compute_transition_matrix(self_transitions="all", conn_weight=0.5, threshold="auto")
+
+        assert (tmk.transition_matrix != old).nnz > 0
+        assert tmk.params["conn_weight"] == 0.5
+
     @pytest.mark.parametrize(
         ("problem", "sparse_mode", "policy"),
         [
