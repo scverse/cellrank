@@ -212,6 +212,48 @@ however the single point of truth for CI jobs is the Hatch test matrix
 defined in `pyproject.toml`. Local testing via hatch and remote CI testing
 use the same Python versions and environments.
 
+(plotting-tests)=
+
+### Plotting tests and ground-truth figures
+
+The plotting tests in `tests/test_plotting.py` come in three flavours, in
+decreasing order of fragility:
+
+- **Visual-regression tests** render a figure and compare it pixel-by-pixel
+  against a committed baseline in `tests/_ground_truth_figures/` (via
+  `matplotlib`'s `compare_images`). Keep these to one representative per
+  plotting function plus genuinely visual variants.
+- **Introspection tests** assert on the returned `Figure`/`Axes` (line width,
+  title text, colormap name, colorbar presence, …) instead of pixels. Prefer
+  these for single-parameter "knob" checks — they are precise and never need a
+  baseline.
+- **Smoke tests** assert that a call runs and returns a `Figure`. Use these for
+  data/behaviour paths that are not worth a pixel baseline.
+
+Only the visual-regression tests need ground-truth figures, so favour the other
+two flavours to keep the baseline set (and the CI fragility it causes on
+dependency bumps) small.
+
+#### Regenerating a ground-truth figure
+
+Pixel rendering differs slightly between operating systems and matplotlib
+versions, so a baseline **must be produced by the same renderer CI validates
+against** — the Linux `hatch-test.py3.12-stable` job. Do **not** commit a figure
+rendered on your laptop (e.g. macOS); it will drift and fail on CI.
+
+CI never updates baselines on its own: every run compares against the committed
+figures and fails on drift. It only *exposes* what it rendered. When you have
+intentionally changed a plot (or are migrating a class to a tighter tolerance):
+
+1. Push your branch and let the `Test` workflow run.
+2. Open the Linux `hatch-test.py3.12-stable` job and download the
+   **`rendered-figures`** artifact (uploaded on every run, pass or fail).
+3. **Review the changed figures** — this is the gate: only promote them if the
+   new output is what you intend.
+4. Copy the relevant PNGs from the artifact into `tests/_ground_truth_figures/`
+   and commit them. The diff (new baseline images) is reviewed like any code.
+5. CI re-runs and now validates against the updated, Linux-matching baselines.
+
 ## Writing documentation
 
 Please write documentation for new or changed features and use-cases.

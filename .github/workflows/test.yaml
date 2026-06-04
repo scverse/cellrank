@@ -78,6 +78,21 @@ jobs:
       env:
         MPLBACKEND: agg
       run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+    # Upload the figures the plotting tests rendered so a maintainer can promote
+    # them to ground-truth baselines (see docs/contributing.md). Only the Linux
+    # py3.12-stable job is published: ground-truth figures must match the renderer
+    # CI validates against, and this is the canonical one. `always()` so figures
+    # are available even when an image comparison fails (the actual is saved
+    # before the assertion).
+    - name: Archive rendered figures (ground-truth baseline source)
+      if: always() && matrix.os == 'ubuntu-latest' && matrix.env.name == 'hatch-test.py3.12-stable'
+      uses: actions/upload-artifact@v4
+      with:
+        name: rendered-figures
+        path: tests/figures/*
+        retention-days: 14
+        compression-level: 0  # PNGs are already compressed
+        if-no-files-found: warn
     - name: Generate coverage report
       run: |
         test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
