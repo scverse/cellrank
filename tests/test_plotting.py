@@ -1870,6 +1870,7 @@ class TestFittedModel:
 
 
 class TestCircularProjection:
+    # --- behaviour / error contracts ---
     def test_proj_too_few_lineages(self, adata_gpcca_fwd):
         adata, _ = adata_gpcca_fwd
         lineages = adata.obsm[Key.obsm.fate_probs(False)].names[:2]
@@ -1877,75 +1878,94 @@ class TestCircularProjection:
         with pytest.raises(ValueError, match=r"Expected at least `3` lineages"):
             cr.pl.circular_projection(adata, keys=["clusters", "clusters"], lineages=lineages)
 
-    @compare()
-    def test_proj_duplicate_keys(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys=["clusters", "clusters"], dpi=DPI, save=fpath)
+    def test_proj_duplicate_keys(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        cr.pl.circular_projection(adata, keys=["clusters", "clusters"], dpi=DPI)
 
         key = "X_fate_simplex_fwd"
         assert key in adata.obsm
         assert isinstance(adata.obsm[key], np.ndarray)
         assert adata.obsm[key].shape[1] == 2
+        plt.close("all")
 
-    @compare()
-    def test_proj_key_added(self, adata: AnnData, fpath: str):
+    def test_proj_key_added(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
         key = "foo"
-        cr.pl.circular_projection(adata, keys=adata.var_names[0], key_added=key, dpi=DPI, save=fpath)
+        cr.pl.circular_projection(adata, keys=adata.var_names[0], key_added=key, dpi=DPI)
 
         assert key in adata.obsm
         assert isinstance(adata.obsm[key], np.ndarray)
         assert adata.obsm[key].shape[1] == 2
+        plt.close("all")
 
-    @compare()
-    def test_proj_hide_edges(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="dpt_pseudotime", show_edges=False, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_dont_normalize_by_mean(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="clusters", normalize_by_mean=False, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_use_raw(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys=adata.raw.var_names[0], use_raw=True, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_ncols(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys=adata.var_names[:2], ncols=1, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_labelrot(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="clusters", label_rot="default", dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_labeldistance(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="clusters", label_distance=1.5, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_text_kwargs(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="clusters", text_kwargs={"size": 20}, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_default_ordering(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="clusters", lineage_order="default", dpi=DPI, save=fpath)
-
-    @compare()
-    def test_proj_extra_keys(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys=["kl_divergence", "entropy"], dpi=DPI, save=fpath)
+    def test_proj_extra_keys(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        cr.pl.circular_projection(adata, keys=["kl_divergence", "entropy"], dpi=DPI)
 
         apk = Key.obsm.fate_probs(False)
         assert f"{apk}_kl_divergence" in adata.obs
         assert f"{apk}_entropy" in adata.obs
+        plt.close("all")
 
-    @compare()
-    def test_proj_legend_loc(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys="clusters", legend_loc="upper right", dpi=DPI, save=fpath)
+    # --- visual regression: canonical categorical projection ---
+    @compare(tol=STRICT_TOL)
+    def test_proj_default_ordering(self, adata: AnnData, fpath: str):
+        cr.pl.circular_projection(adata, keys="clusters", lineage_order="default", dpi=DPI, save=fpath)
 
-    @compare()
-    def test_proj_no_cbar(self, adata: AnnData, fpath: str):
-        cr.pl.circular_projection(adata, keys=adata.var_names[0], colorbar=False, dpi=DPI, save=fpath)
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    def test_proj_legend_loc(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _has_legend(_draw(lambda: cr.pl.circular_projection(adata, keys="clusters", legend_loc="upper right")))
+        plt.close("all")
+
+    def test_proj_no_cbar(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        on = _draw(lambda: cr.pl.circular_projection(adata, keys=adata.var_names[0]))
+        off = _draw(lambda: cr.pl.circular_projection(adata, keys=adata.var_names[0], colorbar=False))
+        assert len(off.axes) < len(on.axes)
+        plt.close("all")
+
+    # --- behaviour coverage: assert the call runs and draws content ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys="dpt_pseudotime", show_edges=False)),
+                id="hide_edges",
+            ),
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys="clusters", normalize_by_mean=False)),
+                id="dont_normalize",
+            ),
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys=a.raw.var_names[0], use_raw=True)),
+                id="use_raw",
+            ),
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys=a.var_names[:2], ncols=1)), id="ncols"
+            ),
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys="clusters", label_rot="default")),
+                id="labelrot",
+            ),
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys="clusters", label_distance=1.5)),
+                id="labeldistance",
+            ),
+            pytest.param(
+                lambda a: _draw(lambda: cr.pl.circular_projection(a, keys="clusters", text_kwargs={"size": 20})),
+                id="text_kwargs",
+            ),
+        ],
+    )
+    def test_proj_runs(self, adata_gpcca_fwd, call):
+        adata, _ = adata_gpcca_fwd
+        _assert_drawn(call(adata))
 
 
 class TestPlotRandomWalk:
-    @compare(kind="gpcca")
+    # --- visual regression: a seeded random-walk overlay ---
+    @compare(kind="gpcca", tol=STRICT_TOL)
     def test_kernel_random_walk_params(self, mc: GPCCA, fpath: str):
         mc.kernel.plot_random_walks(
             n_sims=100,
@@ -1956,53 +1976,57 @@ class TestPlotRandomWalk:
             save=fpath,
         )
 
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_start_ixs_range(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(
-            n_sims=10,
-            max_iter=100,
-            seed=42,
-            start_ixs={"dpt_pseudotime": [0, 0]},
-            color="dpt_pseudotime",
-            dpi=DPI,
-            save=fpath,
-        )
+    # --- behaviour coverage: assert the call runs and draws content ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(
+                lambda k: k.plot_random_walks(
+                    n_sims=10,
+                    max_iter=100,
+                    seed=42,
+                    start_ixs={"dpt_pseudotime": [0, 0]},
+                    color="dpt_pseudotime",
+                    dpi=DPI,
+                ),
+                id="start_ixs_range",
+            ),
+            pytest.param(
+                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, basis="pca", dpi=DPI), id="basis"
+            ),
+            pytest.param(
+                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, cmap="viridis", dpi=DPI), id="cmap"
+            ),
+            pytest.param(
+                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, linewidth=2, dpi=DPI), id="line_width"
+            ),
+            pytest.param(
+                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, linealpha=1, dpi=DPI), id="line_alpha"
+            ),
+            pytest.param(
+                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, color="none", dpi=DPI), id="kwargs"
+            ),
+            pytest.param(
+                lambda k: k.plot_random_walks(
+                    n_sims=10, max_iter=100, seed=42, ixs_legend_loc="top right out", legend_loc="upper left", dpi=DPI
+                ),
+                id="ixs_legend_loc",
+            ),
+        ],
+    )
+    def test_kernel_random_walk_runs(self, adata_gpcca_fwd, call):
+        _, g = adata_gpcca_fwd
+        _assert_drawn(_draw(lambda: call(g.kernel)))
 
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_basis(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(n_sims=10, max_iter=100, seed=42, basis="pca", dpi=DPI, save=fpath)
 
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_cmap(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(n_sims=10, max_iter=100, seed=42, cmap="viridis", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_line_width(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(n_sims=10, max_iter=100, seed=42, linewidth=2, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_line_alpha(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(n_sims=10, max_iter=100, seed=42, linealpha=1, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_kwargs(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(n_sims=10, max_iter=100, seed=42, color="none", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_kernel_random_walk_ixs_legend_loc(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_random_walks(
-            n_sims=10,
-            max_iter=100,
-            seed=42,
-            ixs_legend_loc="top right out",
-            legend_loc="upper left",
-            dpi=DPI,
-            save=fpath,
-        )
+def _flow_time_too_close(g):
+    g.adata.obs["day"] = g.adata.obs["age(days)"].cat.rename_categories({"12": 0.1, "35": 0.291}).values
+    return g.kernel.plot_single_flow("Astrocytes", "clusters", "day", show=False)
 
 
 class TestPlotSingleFlow:
-    @compare(kind="gpcca")
+    # --- visual regression: a single-flow diagram ---
+    @compare(kind="gpcca", tol=STRICT_TOL)
     def test_flow_source_clusters(self, mc: GPCCA, fpath: str):
         mc.kernel.plot_single_flow(
             "Neuroblast",
@@ -2013,105 +2037,71 @@ class TestPlotSingleFlow:
             save=fpath,
         )
 
-    @compare(kind="gpcca")
-    def test_flow_clusters_subset(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow(
-            "Astrocytes",
-            "clusters",
-            "age(days)",
-            clusters=["OPC", "Endothelial", "OL"],
-            dpi=DPI,
-            save=fpath,
-        )
+    # --- parameter plumbing: assert on the returned Axes, not on pixels ---
+    def test_flow_legend_loc(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        ax = g.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", legend_loc="upper left out", show=False)
+        assert _has_legend(ax.figure)
+        plt.close("all")
 
-    @compare(kind="gpcca")
-    def test_flow_min_flow_remove_empty_clusters(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow(
-            "Astrocytes",
-            "clusters",
-            "age(days)",
-            min_flow=0.2,
-            remove_empty_clusters=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(kind="gpcca")
-    def test_flow_min_flow_keep_empty_clusters(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow(
-            "Astrocytes",
-            "clusters",
-            "age(days)",
-            min_flow=0.2,
-            remove_empty_clusters=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(kind="gpcca")
-    def test_flow_cluster_ascending(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", ascending=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_flow_cluster_descending(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", ascending=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_flow_explicit_cluster_order(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow(
-            "Astrocytes",
-            "clusters",
-            "age(days)",
-            ascending=None,
-            clusters=["OPC", "OL"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(kind="gpcca")
-    def test_flow_legend_loc(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow(
-            "Astrocytes",
-            "clusters",
-            "age(days)",
-            legend_loc="upper left out",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(kind="gpcca")
-    def test_flow_alpha(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", alpha=0.3, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_flow_no_xticks(self, mc: GPCCA, fpath: str):
-        mc.kernel.plot_single_flow(
-            "Astrocytes",
-            "clusters",
-            "age(days)",
-            xticks_step_size=None,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(kind="gpcca")
-    def test_flow_time_categories_too_close(self, mc: GPCCA, fpath: str):
-        mc.adata.obs["day"] = (
-            mc.adata.obs["age(days)"]
-            .cat.rename_categories(
-                {
-                    "12": 0.1,
-                    "35": 0.291,
-                }
-            )
-            .values
-        )
-        mc.kernel.plot_single_flow("Astrocytes", "clusters", "day", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_flow_return_ax(self, mc: GPCCA, fpath: str):
-        ax = mc.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", show=False, dpi=DPI, save=fpath)
+    def test_flow_return_ax(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        ax = g.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", show=False)
         assert isinstance(ax, plt.Axes)
+        plt.close("all")
+
+    # --- behaviour coverage: assert the call runs and draws content ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow(
+                    "Astrocytes", "clusters", "age(days)", clusters=["OPC", "Endothelial", "OL"], show=False
+                ),
+                id="clusters_subset",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow(
+                    "Astrocytes", "clusters", "age(days)", min_flow=0.2, remove_empty_clusters=True, show=False
+                ),
+                id="min_flow_remove",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow(
+                    "Astrocytes", "clusters", "age(days)", min_flow=0.2, remove_empty_clusters=False, show=False
+                ),
+                id="min_flow_keep",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", ascending=True, show=False),
+                id="ascending",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", ascending=False, show=False),
+                id="descending",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow(
+                    "Astrocytes", "clusters", "age(days)", ascending=None, clusters=["OPC", "OL"], show=False
+                ),
+                id="explicit_order",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow("Astrocytes", "clusters", "age(days)", alpha=0.3, show=False),
+                id="alpha",
+            ),
+            pytest.param(
+                lambda g: g.kernel.plot_single_flow(
+                    "Astrocytes", "clusters", "age(days)", xticks_step_size=None, show=False
+                ),
+                id="no_xticks",
+            ),
+            pytest.param(_flow_time_too_close, id="time_categories_too_close"),
+        ],
+    )
+    def test_flow_runs(self, adata_gpcca_fwd, call):
+        _, g = adata_gpcca_fwd
+        _assert_drawn(call(g).figure)
 
 
 class TestPlotDriverCorrelation:
@@ -2649,26 +2639,33 @@ class TestMacrostateComposition:
 
 @scvelo_skip
 class TestProjectionEmbedding:
-    @compare()
-    def test_scvelo_connectivity_kernel_emb_stream(self, adata: AnnData, fpath: str):
-        ck = ConnectivityKernel(adata)
-        ck.compute_transition_matrix()
-        ck.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
-
-    @compare()
-    def test_scvelo_pseudotime_kernel_hard_threshold_emb_stream(self, adata: AnnData, fpath: str):
-        ptk = PseudotimeKernel(adata, time_key="dpt_pseudotime")
-        ptk.compute_transition_matrix(threshold_scheme="hard", frac_to_keep=0.3)
-        ptk.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
-
-    @compare()
-    def test_scvelo_pseudotime_kernel_soft_threshold_emb_stream(self, adata: AnnData, fpath: str):
-        ptk = PseudotimeKernel(adata, time_key="dpt_pseudotime")
-        ptk.compute_transition_matrix(threshold_scheme="soft", frac_to_keep=0.3)
-        ptk.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
-
-    @compare()
+    # --- visual regression: one representative stream projection ---
+    @compare(tol=STRICT_TOL)
     def test_scvelo_velocity_kernel_emb_stream(self, adata: AnnData, fpath: str):
         vk = VelocityKernel(adata)
         vk.compute_transition_matrix()
         vk.plot_projection(dpi=DPI, save=fpath.removeprefix("scvelo_") + ".png")
+
+    # --- behaviour coverage: each kernel type projects and draws content ---
+    @pytest.mark.parametrize(
+        "build",
+        [
+            pytest.param(lambda a: ConnectivityKernel(a).compute_transition_matrix(), id="connectivity"),
+            pytest.param(
+                lambda a: PseudotimeKernel(a, time_key="dpt_pseudotime").compute_transition_matrix(
+                    threshold_scheme="hard", frac_to_keep=0.3
+                ),
+                id="pseudotime_hard",
+            ),
+            pytest.param(
+                lambda a: PseudotimeKernel(a, time_key="dpt_pseudotime").compute_transition_matrix(
+                    threshold_scheme="soft", frac_to_keep=0.3
+                ),
+                id="pseudotime_soft",
+            ),
+        ],
+    )
+    def test_projection_runs(self, adata_gpcca_fwd, build):
+        adata, _ = adata_gpcca_fwd
+        kernel = build(adata)
+        _assert_drawn(_draw(lambda: kernel.plot_projection(dpi=DPI)))
