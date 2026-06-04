@@ -578,15 +578,11 @@ class TestClusterTrends:
     )
     def test_cluster_lineage_runs(self, adata_gpcca_fwd, call):
         adata, _ = adata_gpcca_fwd
-        fig = call(adata)
-        assert fig.axes
-        plt.close("all")
+        _assert_drawn(call(adata))
 
     def test_cluster_lineage_bwd_runs(self, adata_gpcca_bwd):
         adata, _ = adata_gpcca_bwd
-        fig = _run_cluster_trends(adata, create_model(adata), GENES[:10], "0", backward=True)
-        assert fig.axes
-        plt.close("all")
+        _assert_drawn(_run_cluster_trends(adata, create_model(adata), GENES[:10], "0", backward=True))
 
     def test_cluster_lineage_2_failed_genes(self, adata_gpcca_fwd):
         adata, _ = adata_gpcca_fwd
@@ -705,10 +701,24 @@ def _as_figure(obj):
     return obj if isinstance(obj, plt.Figure) else getattr(obj, "figure", getattr(obj, "fig", None))
 
 
-def _assert_figures(fig) -> None:
+def _assert_drawn(fig) -> None:
+    """Assert a plotting call produced non-blank figure(s) and close them.
+
+    Stronger than ``isinstance(fig, Figure)``: every figure must have axes and at least one of
+    them must have rendered content (lines / collections / patches / images / a legend). This
+    catches "ran but drew nothing" regressions without needing a pixel baseline. Accepts a
+    :class:`~matplotlib.figure.Figure`, a seaborn ``ClusterGrid``, or a list of either (heatmap
+    ``lineages`` mode).
+    """
     figs = fig if isinstance(fig, list) else [fig]
     assert figs
-    assert all(isinstance(_as_figure(f), plt.Figure) for f in figs)
+    for obj in figs:
+        f = _as_figure(obj)
+        assert isinstance(f, plt.Figure)
+        assert f.axes
+        assert any(
+            ax.lines or ax.collections or ax.patches or ax.images or ax.get_legend() is not None for ax in f.axes
+        )
     plt.close("all")
 
 
@@ -809,25 +819,25 @@ class TestHeatmap:
     )
     def test_heatmap_runs(self, adata_gpcca_fwd, genes, kwargs):
         adata, _ = adata_gpcca_fwd
-        _assert_figures(_run_heatmap(adata, genes, **kwargs))
+        _assert_drawn(_run_heatmap(adata, genes, **kwargs))
 
     def test_heatmap_bwd_runs(self, adata_gpcca_bwd):
         adata, _ = adata_gpcca_bwd
-        _assert_figures(_run_heatmap(adata, GENES[:10], mode="lineages", backward=True))
+        _assert_drawn(_run_heatmap(adata, GENES[:10], mode="lineages", backward=True))
 
     def test_heatmap_lineage_failed_runs(self, adata_gpcca_fwd):
         adata, _ = adata_gpcca_fwd
         res = cr.pl.heatmap(
             adata, _failed_one_lineage(adata), GENES[:10], "latent_time", mode="lineages", dpi=DPI, return_figure=True
         )
-        _assert_figures(res[0] if isinstance(res, tuple) else res)
+        _assert_drawn(res[0] if isinstance(res, tuple) else res)
 
     def test_heatmap_gene_failed_runs(self, adata_gpcca_fwd):
         adata, _ = adata_gpcca_fwd
         res = cr.pl.heatmap(
             adata, _failed_one_gene(adata), GENES[:10], "latent_time", mode="genes", dpi=DPI, return_figure=True
         )
-        _assert_figures(res[0] if isinstance(res, tuple) else res)
+        _assert_drawn(res[0] if isinstance(res, tuple) else res)
 
 
 class TestHeatmapReturns:
@@ -1256,9 +1266,7 @@ class TestGeneTrend:
     def test_trends_runs(self, adata_gpcca_fwd, setup):
         adata, _ = adata_gpcca_fwd
         model, genes, kwargs = setup(adata)
-        fig = _run_gene_trends(adata, model, genes, **kwargs)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+        _assert_drawn(_run_gene_trends(adata, model, genes, **kwargs))
 
     # --- behavior / error contracts ---
     def test_invalid_time_key(self, adata_cflare: AnnData):
@@ -1399,8 +1407,7 @@ class TestCFLARE:
     )
     def test_cflare_runs(self, adata_cflare_fwd, method, kwargs):
         _, mc = adata_cflare_fwd
-        fig = _estimator_fig(mc, method, **kwargs)
-        assert fig.axes
+        _assert_drawn(_estimator_fig(mc, method, **kwargs))
 
 
 class TestGPCCA:
@@ -1538,8 +1545,7 @@ class TestGPCCA:
     )
     def test_gpcca_runs(self, adata_gpcca_fwd, method, kwargs):
         _, g = adata_gpcca_fwd
-        fig = _estimator_fig(g, method, **kwargs)
-        assert fig.axes
+        _assert_drawn(_estimator_fig(g, method, **kwargs))
 
 
 def _draw(call):
@@ -1596,8 +1602,7 @@ class TestLineage:
         ],
     )
     def test_pie_runs(self, lineage: cr.Lineage, call):
-        assert call(lineage).axes
-        plt.close("all")
+        _assert_drawn(call(lineage))
 
 
 class TestLineageDrivers:
@@ -1619,13 +1624,11 @@ class TestLineageDrivers:
     # --- behaviour coverage: assert the call runs and produces a figure ---
     def test_drivers_ascending_runs(self, adata_gpcca_fwd):
         _, g = adata_gpcca_fwd
-        assert _draw(lambda: g.plot_lineage_drivers("0", ascending=True)).axes
-        plt.close("all")
+        _assert_drawn(_draw(lambda: g.plot_lineage_drivers("0", ascending=True)))
 
     def test_drivers_backward_runs(self, adata_gpcca_bwd):
         _, g = adata_gpcca_bwd
-        assert _draw(lambda: g.plot_lineage_drivers("0", ncols=2)).axes
-        plt.close("all")
+        _assert_drawn(_draw(lambda: g.plot_lineage_drivers("0", ncols=2)))
 
 
 class TestModel:
@@ -1671,14 +1674,11 @@ class TestModel:
     )
     def test_model_runs(self, adata_gpcca_fwd, setup):
         adata, _ = adata_gpcca_fwd
-        assert isinstance(setup(adata), plt.Figure)
-        plt.close("all")
+        _assert_drawn(setup(adata))
 
     def test_model_default_bwd_runs(self, adata_gpcca_bwd):
         adata, _ = adata_gpcca_bwd
-        fig = _model_fig(adata, lineage="0", prepare_kwargs={"backward": True})
-        assert isinstance(fig, plt.Figure)
-        plt.close("all")
+        _assert_drawn(_model_fig(adata, lineage="0", prepare_kwargs={"backward": True}))
 
 
 @gamr_skip
@@ -1703,8 +1703,7 @@ class TestGAMR:
     def test_gamr_plot_runs(self, gamr_model: GAMR, predict_kwargs, plot_kwargs):
         gamr_model.prepare(gamr_model.adata.var_names[0], "1", "latent_time")
         gamr_model.fit().predict(**predict_kwargs)
-        assert isinstance(gamr_model.plot(dpi=DPI, return_fig=True, **plot_kwargs), plt.Figure)
-        plt.close("all")
+        _assert_drawn(gamr_model.plot(dpi=DPI, return_fig=True, **plot_kwargs))
 
     @pytest.mark.parametrize("conf_int", [1, 0.2], ids=["ci_100", "ci_20"])
     def test_gamr_trends_runs(self, gamr_model: GAMR, conf_int):
@@ -1719,8 +1718,7 @@ class TestGAMR:
             dpi=DPI,
             return_figure=True,
         )
-        assert isinstance(fig, plt.Figure)
-        plt.close("all")
+        _assert_drawn(fig)
 
 
 class TestComposition:
@@ -1730,8 +1728,7 @@ class TestComposition:
 
     def test_composition_autopct_runs(self, adata_gpcca_fwd):
         adata, _ = adata_gpcca_fwd
-        assert _draw(lambda: cr.pl._utils.composition(adata, "clusters", autopct="%1.0f%%")).axes
-        plt.close("all")
+        _assert_drawn(_draw(lambda: cr.pl._utils.composition(adata, "clusters", autopct="%1.0f%%")))
 
 
 class TestFittedModel:
