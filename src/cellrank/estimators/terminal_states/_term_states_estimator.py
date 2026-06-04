@@ -1,7 +1,7 @@
 import abc
 import logging
 import types
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 import matplotlib.pyplot as plt
@@ -23,8 +23,13 @@ from cellrank._utils._key import Key
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import (
     RandomKeys,
+    _check_proportions,
     _convert_to_categorical_series,
+    _map_names_and_colors_from_proportions,
     _merge_categorical_series,
+    _obsm_proportion_weights,
+    _obsm_proportions,
+    _resolve_composition_key,
     _unique_order_preserving,
     save_fig,
 )
@@ -95,7 +100,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
     def set_terminal_states(
         self,
         states: pd.Series | dict[str, Sequence[Any]],
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         allow_overlap: bool = False,
         **kwargs: Any,
     ) -> "TermStatesEstimator":
@@ -113,8 +119,13 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
               If only 1 key is provided, values should correspond to clusters if a categorical
               :class:`~pandas.Series` can be found in :attr:`~anndata.AnnData.obs`.
         cluster_key
-            Key in :attr:`~anndata.AnnData.obs` to associate names and colors with :attr:`terminal_states`.
-            Each state will be given the name and color corresponding to the cluster it mostly overlaps with.
+            Reference annotations to associate names and colors with :attr:`terminal_states`. Either a
+            categorical :attr:`~anndata.AnnData.obs` column (a :class:`str` or ``{"obs": <column>}``) or
+            ``{"obsm": <key>}`` pointing to a proportion :class:`~pandas.DataFrame`; see
+            :meth:`~cellrank.estimators.GPCCA.compute_macrostates`.
+        weight_key
+            Per-observation weights, only used when ``cluster_key`` points to
+            :attr:`~anndata.AnnData.obsm`; see :meth:`~cellrank.estimators.GPCCA.compute_macrostates`.
         %(allow_overlap)s
         kwargs
             Additional keyword arguments.
@@ -129,6 +140,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         states, colors = self._set_categorical_labels(
             categories=states,
             cluster_key=cluster_key,
+            weight_key=weight_key,
             existing=None,
         )
         self._write_states(
@@ -144,7 +156,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
     def set_initial_states(
         self,
         states: pd.Series | dict[str, Sequence[Any]],
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         allow_overlap: bool = False,
         **kwargs: Any,
     ) -> "TermStatesEstimator":
@@ -162,8 +175,13 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
               If only 1 key is provided, values should correspond to clusters if a categorical
               :class:`~pandas.Series` can be found in :attr:`~anndata.AnnData.obs`.
         cluster_key
-            Key in :attr:`~anndata.AnnData.obs` to associate names and colors :attr:`initial_states`.
-            Each state will be given the name and color corresponding to the cluster it mostly overlaps with.
+            Reference annotations to associate names and colors with :attr:`initial_states`. Either a
+            categorical :attr:`~anndata.AnnData.obs` column (a :class:`str` or ``{"obs": <column>}``) or
+            ``{"obsm": <key>}`` pointing to a proportion :class:`~pandas.DataFrame`; see
+            :meth:`~cellrank.estimators.GPCCA.compute_macrostates`.
+        weight_key
+            Per-observation weights, only used when ``cluster_key`` points to
+            :attr:`~anndata.AnnData.obsm`; see :meth:`~cellrank.estimators.GPCCA.compute_macrostates`.
         %(allow_overlap)s
         kwargs
             Additional keyword arguments.
@@ -178,6 +196,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         states, colors = self._set_categorical_labels(
             categories=states,
             cluster_key=cluster_key,
+            weight_key=weight_key,
             existing=None,
         )
         self._write_states(
@@ -615,7 +634,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
     def _set_categorical_labels(
         self,
         categories: pd.Series | dict[str, Any],
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         existing: pd.Series | None = None,
     ) -> tuple[pd.Series, np.ndarray]:
         # fmt: off
@@ -641,25 +661,13 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
             categories = _merge_categorical_series(old=existing, new=categories)
 
         if cluster_key is not None:
-            # check that we can load the reference series from adata
-            if cluster_key not in self.adata.obs:
-                raise KeyError(f"Unable to find clusters in `adata.obs[{cluster_key!r}]`.")
-            series_query, series_reference = categories, self.adata.obs[cluster_key]
-            series_reference = series_reference.cat.rename_categories(
-                {c: str(c) for c in series_reference.cat.categories}
-            )
-
-            # load the reference colors if they exist
-            if Key.uns.colors(cluster_key) in self.adata.uns:
-                colors_reference = _convert_to_hex_colors(self.adata.uns[Key.uns.colors(cluster_key)])
+            source, name = _resolve_composition_key(cluster_key)
+            if weight_key is not None and source != "obsm":
+                raise ValueError("`weight_key` is only supported when `cluster_key` points to `adata.obsm`.")
+            if source == "obs":
+                names, colors = self._names_and_colors_from_obs(name, categories)
             else:
-                colors_reference = _create_categorical_colors(len(series_reference.cat.categories))
-
-            names, colors = _map_names_and_colors(
-                series_reference=series_reference,
-                series_query=series_query,
-                colors_reference=colors_reference,
-            )
+                names, colors = self._names_and_colors_from_obsm(name, weight_key, categories)
             cats = categories.cat.categories
             categories = categories.cat.rename_categories(dict(zip(cats, names)))
         else:
@@ -667,6 +675,54 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
 
         return categories, colors
         # fmt: on
+
+    def _names_and_colors_from_obs(self, key: str, series_query: pd.Series) -> tuple[pd.Series, list[str]]:
+        """Name and color the query categories by overlap with a categorical :attr:`~anndata.AnnData.obs` column."""
+        if key not in self.adata.obs:
+            raise KeyError(f"Unable to find clusters in `adata.obs[{key!r}]`.")
+        series_reference = self.adata.obs[key]
+        series_reference = series_reference.cat.rename_categories({c: str(c) for c in series_reference.cat.categories})
+
+        # load the reference colors if they exist
+        if Key.uns.colors(key) in self.adata.uns:
+            colors_reference = _convert_to_hex_colors(self.adata.uns[Key.uns.colors(key)])
+        else:
+            colors_reference = _create_categorical_colors(len(series_reference.cat.categories))
+
+        return _map_names_and_colors(
+            series_reference=series_reference,
+            series_query=series_query,
+            colors_reference=colors_reference,
+        )
+
+    def _names_and_colors_from_obsm(
+        self, key: str, weight_key: str | None, series_query: pd.Series
+    ) -> tuple[pd.Series, list[str]]:
+        """Name and color the query categories by the dominant covariate of an :attr:`~anndata.AnnData.obsm` frame.
+
+        Each query category (e.g. macrostate) is named after the category with the largest (weighted) summed
+        proportion among its assigned observations -- the soft-assignment analog of :meth:`_names_and_colors_from_obs`.
+        """
+        proportions = _obsm_proportions(self.adata, key)
+        assigned = series_query[~series_query.isnull()]
+        _check_proportions(proportions.loc[assigned.index], key)
+        weights = _obsm_proportion_weights(self.adata, weight_key, series_query.index)
+
+        # load the reference colors if they exist, padding if there are fewer colors than categories
+        n_categories = len(proportions.columns)
+        if Key.uns.colors(key) in self.adata.uns:
+            colors_reference = _convert_to_hex_colors(self.adata.uns[Key.uns.colors(key)])
+        else:
+            colors_reference = _create_categorical_colors(n_categories)
+        if len(colors_reference) < n_categories:
+            colors_reference = _create_categorical_colors(n_categories)
+
+        return _map_names_and_colors_from_proportions(
+            proportions=proportions,
+            series_query=series_query,
+            weights=weights,
+            colors_reference=colors_reference,
+        )
 
     @log_writer
     @shadow

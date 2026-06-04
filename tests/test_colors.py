@@ -3,7 +3,10 @@ import pandas as pd
 import pytest
 from matplotlib.colors import is_color_like
 
-from cellrank._utils._colors import _create_categorical_colors, _map_names_and_colors
+from cellrank._utils._colors import (
+    _create_categorical_colors,
+    _map_names_and_colors,
+)
 
 
 class TestColors:

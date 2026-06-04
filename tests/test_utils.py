@@ -10,14 +10,16 @@ from anndata import AnnData
 from anndata.utils import make_index_unique
 
 from cellrank._utils import Lineage
-from cellrank._utils._colors import _compute_mean_color
+from cellrank._utils._colors import _compute_mean_color, _map_names_and_colors
 from cellrank._utils._parallelize import parallelize
 from cellrank._utils._utils import (
+    _aggregate_proportions,
     _cluster_X,
     _connected,
     _fuzzy_to_discrete,
     _gene_symbols_ctx,
     _irreducible,
+    _map_names_and_colors_from_proportions,
     _merge_categorical_series,
     _one_hot,
     _partition,
@@ -964,3 +966,152 @@ class TestGeneSymbolsCtxManager:
             np.testing.assert_array_equal(adata.var_names, make_index_unique(adata.var["foo"]))
 
         np.testing.assert_array_equal(adata.var_names, adata_orig.var_names)
+
+
+class TestAggregateProportions:
+    def test_not_categorical_groups(self):
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+        groups = pd.Series(["x", "y"], dtype="str")
+
+        with pytest.raises(TypeError, match=r"`groups` to be `categorical`"):
+            _aggregate_proportions(proportions, groups)
+
+    def test_length_mismatch(self):
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+        groups = pd.Series(["x", "y", "x"], dtype="category")
+
+        with pytest.raises(ValueError, match=r"same length"):
+            _aggregate_proportions(proportions, groups)
+
+    def test_unweighted_sum(self):
+        proportions = pd.DataFrame({"a": [0.9, 0.8, 0.1], "b": [0.1, 0.2, 0.9]})
+        groups = pd.Series(["x", "x", "y"], dtype="category")
+
+        out = _aggregate_proportions(proportions, groups)
+
+        assert list(out.index) == ["x", "y"]
+        assert list(out.columns) == ["a", "b"]
+        np.testing.assert_allclose(out.loc["x"].to_numpy(), [1.7, 0.3])
+        np.testing.assert_allclose(out.loc["y"].to_numpy(), [0.1, 0.9])
+
+    def test_weighted_sum(self):
+        proportions = pd.DataFrame({"a": [0.6, 0.2], "b": [0.4, 0.8]})
+        groups = pd.Series(["x", "x"], dtype="category")
+
+        out = _aggregate_proportions(proportions, groups, weights=np.array([10.0, 1.0]))
+
+        np.testing.assert_allclose(out.loc["x"].to_numpy(), [6.2, 4.8])
+
+    def test_ignores_nan_groups_and_empty_categories(self):
+        proportions = pd.DataFrame({"a": [0.9, 0.0, 0.8], "b": [0.1, 1.0, 0.2]})
+        groups = pd.Series(pd.Categorical(["x", np.nan, "x"], categories=["x", "y"]))
+
+        out = _aggregate_proportions(proportions, groups)
+
+        # NaN row ignored; empty group "y" stays all-zero
+        assert list(out.index) == ["x", "y"]
+        np.testing.assert_allclose(out.loc["x"].to_numpy(), [1.7, 0.3])
+        np.testing.assert_allclose(out.loc["y"].to_numpy(), [0.0, 0.0])
+
+    def test_onehot_reduces_to_counts(self):
+        groups = pd.Series(["x", "x", "y"], dtype="category")
+        reference = pd.Series(["a", "b", "a"], dtype="category")
+        proportions = pd.get_dummies(reference).astype(float)
+
+        out = _aggregate_proportions(proportions, groups)
+
+        # one-hot proportions summed per group == per-group category counts
+        np.testing.assert_allclose(out.loc["x"].to_numpy(), [1.0, 1.0])
+        np.testing.assert_allclose(out.loc["y"].to_numpy(), [1.0, 0.0])
+
+
+class TestMapNamesAndColorsFromProportions:
+    def test_not_categorical_query(self):
+        query = pd.Series(["x", "y", "z"], dtype="str")
+        proportions = pd.DataFrame({"a": [1.0, 0.0, 0.5], "b": [0.0, 1.0, 0.5]})
+
+        with pytest.raises(TypeError, match=r"Query series must be"):
+            _map_names_and_colors_from_proportions(proportions, query)
+
+    def test_length_mismatch(self):
+        query = pd.Series(["x", "y", "z"], dtype="category")
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+
+        with pytest.raises(ValueError, match=r"same length"):
+            _map_names_and_colors_from_proportions(proportions, query)
+
+    def test_negative_en_cutoff(self):
+        query = pd.Series(["x", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+
+        with pytest.raises(ValueError, match=r"entropy cutoff to be non-negative"):
+            _map_names_and_colors_from_proportions(proportions, query, en_cutoff=-1)
+
+    def test_too_few_colors(self):
+        query = pd.Series(["x", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [1.0, 0.0], "b": [0.0, 1.0]})
+
+        with pytest.raises(ValueError, match=r"smaller than"):
+            _map_names_and_colors_from_proportions(proportions, query, colors_reference=["red"])
+
+    def test_empty(self):
+        query = pd.Series([], dtype="category")
+        proportions = pd.DataFrame({"a": [], "b": []})
+
+        r = _map_names_and_colors_from_proportions(proportions, query)
+
+        assert isinstance(r, pd.Series)
+        assert isinstance(r.dtype, pd.CategoricalDtype)
+
+    def test_onehot_matches_counts(self):
+        # one-hot proportions + unit weights reduce exactly to the hard-count mapping
+        reference = pd.Series(["a", "b", np.nan, "b", "a"], dtype="category")
+        query = pd.Series(["x", "x", np.nan, "y", "y"], dtype="category")
+        proportions = pd.get_dummies(reference).astype(float)
+        colors = ["red", "green"]
+
+        names_ref, colors_ref = _map_names_and_colors(reference, query, colors_reference=colors)
+        names_prop, colors_prop = _map_names_and_colors_from_proportions(proportions, query, colors_reference=colors)
+
+        np.testing.assert_array_equal(names_prop.values, names_ref.values)
+        np.testing.assert_array_equal(names_prop.index.values, names_ref.index.values)
+        assert colors_prop == colors_ref
+
+    def test_dominant_category(self):
+        query = pd.Series(["x", "x", "y", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.9, 0.8, 0.1, 0.2], "b": [0.1, 0.2, 0.9, 0.8]})
+
+        names = _map_names_and_colors_from_proportions(proportions, query)
+
+        assert list(names.index) == ["x", "y"]
+        assert list(names.values) == ["a", "b"]
+
+    def test_ignores_nan_query(self):
+        query = pd.Series(["x", np.nan, "x"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.9, 0.0, 0.8], "b": [0.1, 1.0, 0.2]})
+
+        names = _map_names_and_colors_from_proportions(proportions, query)
+
+        assert list(names.index) == ["x"]
+        assert list(names.values) == ["a"]
+
+    def test_weighting_changes_name(self):
+        query = pd.Series(["x", "x"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.6, 0.2], "b": [0.4, 0.8]})
+
+        # unweighted: a=0.8, b=1.2 -> dominant is b
+        names_unw = _map_names_and_colors_from_proportions(proportions, query)
+        assert list(names_unw.values) == ["b"]
+
+        # weighting the first row heavily: a=6.2, b=4.8 -> dominant is a
+        names_w = _map_names_and_colors_from_proportions(proportions, query, weights=np.array([10.0, 1.0]))
+        assert list(names_w.values) == ["a"]
+
+    def test_duplicate_dominant_deduped(self):
+        query = pd.Series(["x", "y"], dtype="category")
+        proportions = pd.DataFrame({"a": [0.9, 0.8], "b": [0.1, 0.2]})
+
+        names, colors = _map_names_and_colors_from_proportions(proportions, query, colors_reference=["red", "green"])
+
+        assert list(names.values) == ["a_1", "a_2"]
+        assert colors[0] != colors[1]

@@ -7,7 +7,7 @@ import os
 import time as _time
 import types
 import warnings
-from collections.abc import Callable, Hashable, Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, Literal, TypeVar
 
 import networkx as nx
@@ -28,6 +28,7 @@ from cellrank._utils._colors import (
     _compute_mean_color,
     _convert_to_hex_colors,
     _insert_categorical_colors,
+    _names_and_colors_from_association,
 )
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
@@ -318,6 +319,53 @@ def _mat_mat_corr_dense(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         return (X @ Y - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
 
 
+def _mat_mat_corr_dense_omit_nan(X: np.ndarray, Y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Compute pairwise correlations between rows of ``X`` and columns of ``Y``, omitting missing values.
+
+    For every ``(row, column)`` pair, only cells where *both* entries are finite contribute, mirroring
+    :func:`scipy.stats.pearsonr` with ``nan_policy='omit'``. The same population-standard-deviation convention as
+    :func:`_mat_mat_corr_dense` is used, so the result is identical to it when neither ``X`` nor ``Y`` contains
+    missing values.
+
+    Parameters
+    ----------
+    X
+        Array of `(M, N)` elements, may contain :obj:`~numpy.nan`.
+    Y
+        Array of `(N, K)` elements, may contain :obj:`~numpy.nan`.
+
+    Returns
+    -------
+    The `(M, K)` correlations and the `(M, K)` pairwise sample sizes (number of jointly non-missing cells).
+    """
+    mask_x = np.isfinite(X)  # genes x cells
+    mask_y = np.isfinite(Y)  # cells x lineages
+
+    # zero out missing entries so they don't contribute to the sums below
+    X0 = np.where(mask_x, X, 0.0)
+    Y0 = np.where(mask_y, Y, 0.0)
+    mask_x = mask_x.astype(X0.dtype)
+    mask_y = mask_y.astype(Y0.dtype)
+
+    # pairwise sums over the cells that are valid in both the gene and the lineage
+    n = mask_x @ mask_y  # number of jointly valid cells per (gene, lineage)
+    sum_x = X0 @ mask_y
+    sum_y = mask_x @ Y0
+    sum_xx = (X0 * X0) @ mask_y
+    sum_yy = mask_x @ (Y0 * Y0)
+    sum_xy = X0 @ Y0
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        X_bar = sum_x / n
+        y_bar = sum_y / n
+        X_std = np.sqrt(sum_xx / n - X_bar**2)
+        y_std = np.sqrt(sum_yy / n - y_bar**2)
+        corr = (sum_xy - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
+
+    return corr, n
+
+
 def _perm_test(
     ixs: np.ndarray,
     corr: np.ndarray,
@@ -360,6 +408,7 @@ def _correlation_test(
     confidence_level: float = 0.95,
     n_perms: int | None = None,
     seed: int | None = None,
+    nan_policy: Literal["propagate", "omit"] = "propagate",
     **kwargs: Any,
 ) -> pd.DataFrame:
     """Perform a statistical test.
@@ -382,6 +431,12 @@ def _correlation_test(
         Number of permutations if ``method = 'perm_test'``.
     seed
         Random seed if ``method = 'perm_test'``.
+    nan_policy
+        How to handle missing values (:obj:`~numpy.nan`) in ``X`` or ``Y``:
+
+        - ``'propagate'`` - missing values propagate to the result.
+        - ``'omit'`` - compute each correlation only over jointly non-missing cells. Only supported for dense ``X``
+          and ``method='fisher'``.
     %(parallel)s
 
     Returns
@@ -401,6 +456,7 @@ def _correlation_test(
         n_perms=n_perms,
         seed=seed,
         confidence_level=confidence_level,
+        nan_policy=nan_policy,
         **kwargs,
     )
     invalid = (corr < -1) | (corr > 1)
@@ -441,6 +497,7 @@ def _correlation_test_helper(
     n_perms: int | None = None,
     seed: int | None = None,
     confidence_level: float = 0.95,
+    nan_policy: Literal["propagate", "omit"] = "propagate",
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute the correlation between rows in matrix ``X`` columns of matrix ``Y``.
@@ -459,6 +516,12 @@ def _correlation_test_helper(
         Random seed if ``method = 'perm_test'``.
     confidence_level
         Confidence level for the confidence interval calculation. Must be in `[0, 1]`.
+    nan_policy
+        How to handle missing values (:obj:`~numpy.nan`) in ``X`` or ``Y``:
+
+        - ``'propagate'`` - missing values propagate to the result, as in :func:`numpy.matmul`.
+        - ``'omit'`` - compute each pairwise correlation only over the cells that are valid in both entries,
+          mirroring :func:`scipy.stats.pearsonr`. Only supported for dense ``X`` and ``method='fisher'``.
     kwargs
         Keyword arguments for :func:`cellrank._utils._parallelize.parallelize`.
 
@@ -479,6 +542,8 @@ def _correlation_test_helper(
 
     if not (0 <= confidence_level <= 1):
         raise ValueError(f"Expected `confidence_level` to be in interval `[0, 1]`, found `{confidence_level}`.")
+    if nan_policy not in ("propagate", "omit"):
+        raise ValueError(f"Expected `nan_policy` to be one of `['propagate', 'omit']`, found `{nan_policy!r}`.")
 
     n = X.shape[1]  # genes x cells
     ql = 1 - confidence_level - (1 - confidence_level) / 2.0
@@ -487,17 +552,33 @@ def _correlation_test_helper(
     if sp.issparse(X) and not sp.isspmatrix_csr(X):
         X = sp.csr_matrix(X)
 
-    corr = _mat_mat_corr_sparse(X, Y) if sp.issparse(X) else _mat_mat_corr_dense(X, Y)
+    if nan_policy == "omit":
+        if sp.issparse(X):
+            raise NotImplementedError(
+                "`nan_policy='omit'` is only supported for dense expression data. "
+                "Please densify the data, e.g. via `adata.X = adata.X.toarray()`, before computing drivers."
+            )
+        if method != TestMethod.FISHER:
+            raise NotImplementedError(
+                f"`nan_policy='omit'` is only supported with `method='fisher'`, found `method={method.value!r}`."
+            )
+        # `n` becomes a per-pair sample size (number of jointly non-missing cells)
+        corr, n = _mat_mat_corr_dense_omit_nan(X, Y)
+    else:
+        corr = _mat_mat_corr_sparse(X, Y) if sp.issparse(X) else _mat_mat_corr_dense(X, Y)
 
     if method == TestMethod.FISHER:
         # see: https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#Using_the_Fisher_transformation
-        mean, se = np.arctanh(corr), 1.0 / np.sqrt(n - 3)
-        z_score = (np.arctanh(corr) - np.arctanh(0)) * np.sqrt(n - 3)
+        # `n` may be a per-pair sample size when `nan_policy='omit'`; pairs with `n <= 3` yield `NaN`
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            mean, se = np.arctanh(corr), 1.0 / np.sqrt(n - 3)
+            z_score = (np.arctanh(corr) - np.arctanh(0)) * np.sqrt(n - 3)
 
-        z = st.norm.ppf(qh)
-        corr_ci_low = np.tanh(mean - z * se)
-        corr_ci_high = np.tanh(mean + z * se)
-        pvals = 2 * st.norm.cdf(-np.abs(z_score))
+            z = st.norm.ppf(qh)
+            corr_ci_low = np.tanh(mean - z * se)
+            corr_ci_high = np.tanh(mean + z * se)
+            pvals = 2 * st.norm.cdf(-np.abs(z_score))
 
     elif method == TestMethod.PERM_TEST:
         if not isinstance(n_perms, int):
@@ -1570,3 +1651,183 @@ def _genesymbols(wrapped: Callable[..., Any], instance: Any, args: Any, kwargs: 
         use_raw=kwargs.get("use_raw", False),
     ):
         return wrapped(*args, **kwargs)
+
+
+def _resolve_composition_key(key: str | Mapping[str, str]) -> tuple[str, str]:
+    """Resolve ``key`` to a ``(source, name)`` pair, where ``source`` is ``'obs'`` or ``'obsm'``.
+
+    Accepts a bare :class:`str` (interpreted as an :attr:`~anndata.AnnData.obs` column) or a
+    single-entry mapping ``{"obs": <column>}`` / ``{"obsm": <key>}``. Used by both
+    :meth:`~cellrank.estimators.GPCCA.plot_macrostate_composition` and macrostate naming so
+    the obs/obsm convention stays single-sourced.
+    """
+    if isinstance(key, str):
+        return "obs", key
+    if isinstance(key, Mapping):
+        if len(key) != 1:
+            raise ValueError(f"Expected `key` to have exactly one entry, found `{len(key)}`.")
+        ((source, name),) = key.items()
+        if source not in ("obs", "obsm"):
+            raise ValueError(f"Expected `key` to use `'obs'` or `'obsm'`, found `{source!r}`.")
+        return source, name
+    raise TypeError(f"Expected `key` to be a `str` or a `dict`, found `{type(key).__name__!r}`.")
+
+
+def _obsm_proportions(adata: AnnData, key: str) -> pd.DataFrame:
+    """Fetch an :attr:`~anndata.AnnData.obsm` proportion frame, aligned positionally to ``obs_names``.
+
+    The frame's own index is ignored; rows are realigned to ``adata.obs_names`` by position.
+    Row-sum validation is left to the caller, which validates only the rows it actually uses.
+    """
+    if key not in adata.obsm:
+        raise KeyError(f"Data not found in `adata.obsm[{key!r}]`.")
+    fractions = adata.obsm[key]
+    if not isinstance(fractions, pd.DataFrame):
+        raise TypeError(
+            f"Expected `adata.obsm[{key!r}]` to be a `pandas.DataFrame`, found `{type(fractions).__name__}`."
+        )
+    # align to obs_names positionally, ignoring whatever index the frame carries
+    return pd.DataFrame(fractions.to_numpy(), index=adata.obs_names, columns=fractions.columns)
+
+
+def _check_proportions(fractions: pd.DataFrame, key: str, atol: float = 1e-3) -> None:
+    """Check that the rows of a proportion frame sum to :math:`1` within ``atol``."""
+    row_sums = fractions.to_numpy().sum(axis=1)
+    if not np.allclose(row_sums, 1.0, atol=atol):
+        raise ValueError(f"Expected rows of `adata.obsm[{key!r}]` to be proportions summing to `1`.")
+
+
+def _obsm_proportion_weights(adata: AnnData, weight_key: str | None, index: pd.Index) -> np.ndarray:
+    """Resolve per-observation weights for an obsm proportion frame.
+
+    If ``weight_key`` is :obj:`None`, every observation is weighted equally (``1.0``). Otherwise
+    each observation is weighted by ``adata.obs[weight_key]`` aligned to ``index`` -- any
+    per-observation quantity, a common one being the number of cells per aggregated sample.
+    """
+    if weight_key is None:
+        return np.ones(len(index), dtype=float)
+    if weight_key not in adata.obs:
+        raise KeyError(f"Weights not found in `adata.obs[{weight_key!r}]`.")
+    return adata.obs.loc[index, weight_key].to_numpy(dtype=float)
+
+
+def _aggregate_proportions(
+    proportions: pd.DataFrame,
+    groups: pd.Series,
+    weights: np.ndarray | None = None,
+) -> pd.DataFrame:
+    """Sum the (optionally weighted) proportion rows of each group.
+
+    The reusable primitive behind both :meth:`~cellrank.estimators.GPCCA.plot_macrostate_composition`
+    and macrostate naming, so the two share identical semantics: each observation contributes its
+    proportion row to its group, scaled by its weight.
+
+    Parameters
+    ----------
+    proportions
+        Per-observation proportions, one row per observation aligned *positionally* to ``groups``.
+        Columns are the categories; rows are typically proportions summing to :math:`1`.
+    groups
+        Categorical per-observation group assignment (e.g. macrostates). Observations with a
+        :obj:`NaN` group are ignored. The result has one row per ``groups.cat.categories``.
+    weights
+        Optional per-observation weights aligned positionally to ``groups``. If :obj:`None`, every
+        observation contributes equally (weight :math:`1`); see
+        :meth:`~cellrank.estimators.GPCCA.compute_macrostates` for the weighting semantics.
+
+    Returns
+    -------
+    A :class:`~pandas.DataFrame` indexed by ``groups.cat.categories`` with one column per proportion
+    category; entry ``(g, c)`` is the (weighted) sum of column ``c`` over the observations assigned
+    to group ``g``. With unit weights and one-hot proportions this reduces to the per-group category
+    counts.
+    """
+    if not isinstance(groups.dtype, pd.CategoricalDtype):
+        raise TypeError(f"Expected `groups` to be `categorical`, found `{infer_dtype(groups)}`.")
+    if len(proportions) != len(groups):
+        raise ValueError(
+            f"Expected `proportions` and `groups` to have the same length, found `{len(proportions)}`, `{len(groups)}`."
+        )
+    if weights is None:
+        weights = np.ones(len(groups), dtype=float)
+    weights = np.asarray(weights, dtype=float)
+
+    weighted = proportions.to_numpy(dtype=float) * weights[:, None]
+    group_values = groups.to_numpy()
+    aggregated = pd.DataFrame(0.0, index=groups.cat.categories, columns=proportions.columns)
+    for group in groups.cat.categories:
+        mask = group_values == group
+        if mask.any():
+            aggregated.loc[group] = weighted[mask].sum(axis=0)
+    return aggregated
+
+
+def _map_names_and_colors_from_proportions(
+    proportions: pd.DataFrame,
+    series_query: pd.Series,
+    weights: np.ndarray | None = None,
+    colors_reference: np.ndarray | None = None,
+    en_cutoff: float | None = None,
+) -> pd.Series | tuple[pd.Series, list[Any]]:
+    """Map names and colors from per-observation proportions onto a query.
+
+    Soft-assignment analog of :func:`~cellrank._utils._colors._map_names_and_colors`: instead of
+    counting how many of each query category's observations fall into each reference category, it
+    sums the (optionally weighted) proportion rows per query category via :func:`_aggregate_proportions`
+    and delegates naming/coloring to :func:`~cellrank._utils._colors._names_and_colors_from_association`.
+    For one-hot ``proportions`` and unit ``weights`` it reduces exactly to
+    :func:`~cellrank._utils._colors._map_names_and_colors`.
+
+    Parameters
+    ----------
+    proportions
+        Per-observation proportions, aligned to ``series_query.index``. Columns are the reference
+        categories; each row sums to :math:`1`.
+    series_query
+        Series for which we would like to query the category names. Observations not assigned to any
+        query category (i.e. :obj:`NaN`) are ignored.
+    weights
+        Optional per-observation weights aligned to ``series_query``, scaling each proportion row
+        before it is summed per query category. If :obj:`None`, every observation contributes
+        equally (weight :math:`1`).
+    colors_reference
+        If given, colors for the query categories are pulled from this color array.
+    en_cutoff
+        See :func:`~cellrank._utils._colors._map_names_and_colors`.
+
+    Returns
+    -------
+    Series with updated category names and a corresponding array of colors.
+    """
+    if not isinstance(series_query.dtype, pd.CategoricalDtype):
+        raise TypeError(f"Query series must be `categorical`, found `{infer_dtype(series_query)}`.")
+    if en_cutoff is not None and en_cutoff < 0:
+        raise ValueError(f"Expected entropy cutoff to be non-negative, found `{en_cutoff}`.")
+
+    process_colors = colors_reference is not None
+
+    if not len(series_query):
+        res = pd.Series([], dtype="category")
+        return (res, []) if process_colors else res
+
+    cats_reference = proportions.columns
+    if process_colors:
+        if len(colors_reference) < len(cats_reference):
+            raise ValueError(
+                f"Length of reference colors `{len(colors_reference)}` is smaller than "
+                f"length of reference categories `{len(cats_reference)}`."
+            )
+        colors_reference = colors_reference[: len(cats_reference)]
+        if not all(colors.is_color_like(c) for c in colors_reference):
+            raise ValueError("Not all values are valid colors.")
+        if len(set(colors_reference)) != len(colors_reference):
+            logger.warning("Color sequence contains non-unique elements")
+
+    association_df = _aggregate_proportions(proportions, series_query, weights)
+
+    return _names_and_colors_from_association(
+        association_df=association_df,
+        cats_reference=cats_reference,
+        colors_reference=colors_reference if process_colors else None,
+        en_cutoff=en_cutoff,
+    )

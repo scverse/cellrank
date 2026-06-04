@@ -37,7 +37,9 @@ Nothing, just plots the figure. Optionally saves it based on ``save``."""
 _plots_or_returns_models = """\
 If ``return_models = False``, just plots the figure and optionally saves it based on ``save``.
 Otherwise returns the fitted models as ``{'gene_1': {'lineage_1': <model_11>, ...}, ...}``.
-Models which have failed will be instances of :class:`cellrank.models.FailedModel`."""
+Models which have failed will be instances of :class:`cellrank.models.FailedModel`.
+The returned models can be passed back as ``model`` to reuse the already computed gene trends
+instead of recomputing them."""
 _backward = """\
 backward
     Direction of the process."""
