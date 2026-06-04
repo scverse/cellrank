@@ -184,13 +184,13 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             each observation's proportion row is weighted when summing proportions to pick a
             macrostate's dominant category:
 
-            - :obj:`None` (default) - **every observation contributes equally**, irrespective of
-              how many cells it represents. Each sample's proportion row is added with weight
-              :math:`1`, so naming reflects *sample-level* dominance.
+            - :obj:`None` (default) - **every observation contributes equally**, with weight
+              :math:`1`, irrespective of any per-observation quantity.
             - a key in :attr:`~anndata.AnnData.obs` - each observation's proportion row is scaled
-              by ``adata.obs[weight_key]`` (e.g. the number of cells per aggregated sample) before
-              summing, so samples with more cells count proportionally more and naming reflects
-              *cell-level* dominance.
+              by ``adata.obs[weight_key]`` before summing, so observations with larger weights
+              count proportionally more. The weights can be any per-observation quantity; a common
+              choice is the number of cells per aggregated sample, which makes naming reflect
+              cell-level rather than sample-level dominance.
         kwargs
             Keyword arguments for :meth:`compute_schur`.
 

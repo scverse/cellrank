@@ -324,7 +324,7 @@ def _map_names_and_colors_from_proportions(
     weights
         Optional per-observation weights aligned to ``series_query``, scaling each proportion row
         before it is summed per query category. If :obj:`None`, every observation contributes
-        equally (weight :math:`1`), regardless of how many cells it may represent.
+        equally (weight :math:`1`).
     colors_reference
         If given, colors for the query categories are pulled from this color array.
     en_cutoff
