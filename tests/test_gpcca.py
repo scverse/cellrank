@@ -16,7 +16,7 @@ import cellrank as cr
 from cellrank._utils import Lineage
 from cellrank._utils._key import Key
 from cellrank.kernels import ConnectivityKernel, VelocityKernel
-from tests._helpers import assert_array_nan_equal, assert_estimators_equal
+from tests._helpers import assert_array_nan_equal, assert_estimators_equal, petsc_slepc_skip
 
 
 # fmt: off
@@ -1149,11 +1149,9 @@ class TestGPCCAIO:
         with pytest.raises(ValueError, match="Expected `adata` to be of length"):
             _ = cr.estimators.GPCCA.read(os.path.join(tmpdir, "foo.pkl"), adata=adata)
 
+    @petsc_slepc_skip
     @pytest.mark.parametrize("verbose", [None, False])
     def test_compute_schur_verbosity(self, adata_large: AnnData, verbose: bool | None, capsys):
-        _ = pytest.importorskip("petsc4py")
-        _ = pytest.importorskip("slepc4py")
-
         vk = VelocityKernel(adata_large).compute_transition_matrix(softmax_scale=4.0)
         g = cr.estimators.GPCCA(vk)
 
