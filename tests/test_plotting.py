@@ -1719,73 +1719,54 @@ class TestGeneTrend:
 
 
 class TestCFLARE:
-    @compare(kind="cflare")
+    # --- visual regression: one representative render per plot type ---
+    @compare(kind="cflare", tol=STRICT_TOL)
     def test_mc_spectrum(self, mc: CFLARE, fpath: str):
         mc.plot_spectrum(dpi=DPI, save=fpath)
 
-    @compare(kind="cflare")
+    @compare(kind="cflare", tol=STRICT_TOL)
     def test_mc_complex_spectrum(self, mc: CFLARE, fpath: str):
         mc.plot_spectrum(real_only=False, dpi=DPI, save=fpath)
 
-    @compare(kind="cflare")
+    @compare(kind="cflare", tol=STRICT_TOL)
     def test_mc_real_spectrum(self, mc: CFLARE, fpath: str):
         mc.plot_spectrum(real_only=True, dpi=DPI, save=fpath)
 
-    @compare(kind="cflare")
-    def test_mc_real_spectrum_hide_xticks(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(real_only=True, show_all_xticks=False, dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
-    def test_mc_real_spectrum_hide_eigengap(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(real_only=True, show_eigengap=False, dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
-    def test_mc_spectrum_title(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(title="foobar", real_only=False, dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
-    def test_mc_marker(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(dpi=DPI, marker="X", save=fpath)
-
-    @compare(kind="cflare")
-    def test_mc_kwargs_linewidths(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(dpi=DPI, linewidths=20, save=fpath)
-
-    @compare(kind="cflare")
-    def test_mc_spectrum_evals(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(2, real_only=True, dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
-    def test_mc_spectrum_evals_complex(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(2, real_only=False, dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
+    @compare(kind="cflare", tol=STRICT_TOL)
     def test_final_states(self, mc: CFLARE, fpath: str):
         mc.plot_macrostates(which="terminal", dpi=DPI, save=fpath)
 
-    @compare(kind="cflare")
-    def test_final_states_clusters(self, mc: CFLARE, fpath: str):
-        mc.plot_macrostates(which="terminal", color="clusters", dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
+    @compare(kind="cflare", tol=STRICT_TOL)
     def test_lin_probs(self, mc: CFLARE, fpath: str):
         mc.plot_fate_probabilities(dpi=DPI, save=fpath)
 
-    @compare(kind="cflare")
-    def test_lin_probs_clusters(self, mc: CFLARE, fpath: str):
-        mc.plot_fate_probabilities(color="clusters", dpi=DPI, save=fpath)
+    # --- parameter plumbing: assert on the Figure/Axes, not on pixels ---
+    def test_mc_spectrum_title(self, adata_cflare_fwd):
+        _, mc = adata_cflare_fwd
+        fig = _estimator_fig(mc, "plot_spectrum", title="foobar", real_only=False)
+        assert _any_title(fig, "foobar")
 
-    @compare(kind="cflare")
-    def test_lin_probs_cmap(self, mc: CFLARE, fpath: str):
-        mc.plot_fate_probabilities(cmap=cm.inferno, dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
-    def test_lin_probs_lineages(self, mc: CFLARE, fpath: str):
-        mc.plot_fate_probabilities(states=["0"], dpi=DPI, save=fpath)
-
-    @compare(kind="cflare")
-    def test_lin_probs_time(self, mc: CFLARE, fpath: str):
-        mc.plot_fate_probabilities(mode="time", time_key="latent_time", dpi=DPI, save=fpath)
+    # --- behaviour coverage: assert the call runs and produces a figure ---
+    @pytest.mark.parametrize(
+        ("method", "kwargs"),
+        [
+            pytest.param("plot_spectrum", {"real_only": True, "show_all_xticks": False}, id="spectrum_no_xticks"),
+            pytest.param("plot_spectrum", {"real_only": True, "show_eigengap": False}, id="spectrum_no_eigengap"),
+            pytest.param("plot_spectrum", {"marker": "X"}, id="spectrum_marker"),
+            pytest.param("plot_spectrum", {"linewidths": 20}, id="spectrum_linewidths"),
+            pytest.param("plot_spectrum", {"n": 2, "real_only": True}, id="spectrum_evals"),
+            pytest.param("plot_spectrum", {"n": 2, "real_only": False}, id="spectrum_evals_complex"),
+            pytest.param("plot_macrostates", {"which": "terminal", "color": "clusters"}, id="final_states_clusters"),
+            pytest.param("plot_fate_probabilities", {"color": "clusters"}, id="lin_probs_clusters"),
+            pytest.param("plot_fate_probabilities", {"cmap": cm.inferno}, id="lin_probs_cmap"),
+            pytest.param("plot_fate_probabilities", {"states": ["0"]}, id="lin_probs_lineages"),
+            pytest.param("plot_fate_probabilities", {"mode": "time", "time_key": "latent_time"}, id="lin_probs_time"),
+        ],
+    )
+    def test_cflare_runs(self, adata_cflare_fwd, method, kwargs):
+        _, mc = adata_cflare_fwd
+        fig = _estimator_fig(mc, method, **kwargs)
+        assert fig.axes
 
 
 class TestGPCCA:
@@ -2561,75 +2542,85 @@ class TestPlotSingleFlow:
 
 
 class TestPlotDriverCorrelation:
-    @compare(kind="gpcca")
+    # --- visual regression: base scatter + the labelled gene-set variant ---
+    @compare(kind="gpcca", tol=STRICT_TOL)
     def test_driver_corr(self, mc: GPCCA, fpath: str):
         mc.plot_lineage_drivers_correlation("1", "2", dpi=DPI, save=fpath, title="bar", size=100)
 
-    @compare(kind="gpcca")
-    def test_driver_corr_color(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers_correlation("0", "1", dpi=DPI, save=fpath, color="2_corr")
-
-    @compare(kind="gpcca")
+    @compare(kind="gpcca", tol=STRICT_TOL)
     def test_driver_corr_gene_sets(self, mc: GPCCA, fpath: str):
         mc.plot_lineage_drivers_correlation("0", "1", dpi=DPI, save=fpath, gene_sets={"0": mc.adata.var_names[:3]})
 
-    @compare(kind="gpcca")
-    def test_driver_corr_gene_sets_colors(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers_correlation(
-            "0",
-            "1",
-            dpi=DPI,
-            save=fpath,
-            gene_sets={"0": mc.adata.var_names[:3], "1": [mc.adata.var_names[4]]},
-            gene_sets_colors=["red", "black"],
-        )
+    # --- parameter plumbing: assert on the returned Axes, not on pixels ---
+    def test_driver_corr_size(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        ax = g.plot_lineage_drivers_correlation("1", "2", size=100, show=False)
+        assert set(_scatter_collection(ax).get_sizes()) == {100}
 
-    @compare(kind="gpcca")
-    def test_driver_corr_legend_loc(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers_correlation(
+    def test_driver_corr_cmap(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        ax = g.plot_lineage_drivers_correlation("0", "1", color="1_qval", cmap="inferno", show=False)
+        assert _any_cmap(ax.figure, "inferno")
+
+    def test_driver_corr_legend_loc(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        ax = g.plot_lineage_drivers_correlation(
             "0",
             "1",
-            dpi=DPI,
-            save=fpath,
-            gene_sets={"0": mc.adata.var_names[:3], "1": [mc.adata.var_names[4]]},
+            gene_sets={"0": g.adata.var_names[:3], "1": [g.adata.var_names[4]]},
             legend_loc="lower center out",
+            show=False,
         )
+        assert _has_legend(ax.figure)
 
-    @compare(kind="gpcca")
-    def test_driver_corr_use_raw(self, mc: GPCCA, fpath: str):
-        mc.compute_lineage_drivers(cluster_key="clusters", use_raw=True)
-        mc.plot_lineage_drivers_correlation("0", "1", dpi=DPI, save=fpath, use_raw=True, color="1_qval")
-
-    @compare(kind="gpcca")
-    def test_driver_corr_cmap(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers_correlation("0", "1", dpi=DPI, save=fpath, color="1_qval", cmap="inferno")
-
-    @compare(kind="gpcca")
-    def test_driver_corr_fontsize(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers_correlation(
-            "0",
-            "1",
-            dpi=DPI,
-            save=fpath,
-            gene_sets={"foo": mc.adata.var_names[4:6]},
-            fontsize=20,
-        )
-
-    @compare(kind="gpcca")
-    def test_driver_corr_adjust_text(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers_correlation(
-            "0",
-            "1",
-            dpi=DPI,
-            save=fpath,
-            gene_sets={"bar": mc.adata.var_names[:3]},
-            adjust_text=True,
-        )
-
-    @compare(kind="gpcca")
-    def test_driver_corr_return_ax(self, mc: GPCCA, fpath: str):
-        ax = mc.plot_lineage_drivers_correlation("2", "0", dpi=DPI, save=fpath, show=False)
+    def test_driver_corr_return_ax(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        ax = g.plot_lineage_drivers_correlation("2", "0", show=False)
         assert isinstance(ax, plt.Axes)
+
+    # --- behaviour coverage: assert the call runs and returns an Axes ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(
+                lambda g: g.plot_lineage_drivers_correlation("0", "1", color="2_corr", show=False), id="color"
+            ),
+            pytest.param(
+                lambda g: g.plot_lineage_drivers_correlation(
+                    "0",
+                    "1",
+                    gene_sets={"0": g.adata.var_names[:3], "1": [g.adata.var_names[4]]},
+                    gene_sets_colors=["red", "black"],
+                    show=False,
+                ),
+                id="gene_sets_colors",
+            ),
+            pytest.param(
+                lambda g: g.plot_lineage_drivers_correlation(
+                    "0", "1", gene_sets={"foo": g.adata.var_names[4:6]}, fontsize=20, show=False
+                ),
+                id="fontsize",
+            ),
+            pytest.param(
+                lambda g: g.plot_lineage_drivers_correlation(
+                    "0", "1", gene_sets={"bar": g.adata.var_names[:3]}, adjust_text=True, show=False
+                ),
+                id="adjust_text",
+            ),
+            pytest.param(
+                lambda g: (
+                    g.compute_lineage_drivers(cluster_key="clusters", use_raw=True),
+                    g.plot_lineage_drivers_correlation("0", "1", use_raw=True, color="1_qval", show=False),
+                )[1],
+                id="use_raw",
+            ),
+        ],
+    )
+    def test_driver_corr_runs(self, adata_gpcca_fwd, call):
+        _, g = adata_gpcca_fwd
+        ax = call(g)
+        assert isinstance(ax, plt.Axes)
+        plt.close("all")
 
 
 class TestLogOdds:
@@ -2968,43 +2959,54 @@ class TestLogOdds:
         )
 
 
+def _msc_obsm(g):
+    g.adata.obsm["clusters"] = pd.get_dummies(g.adata.obs["clusters"]).astype(float)
+    return g.plot_macrostate_composition({"obsm": "clusters"}, show=False)
+
+
+def _msc_obsm_weighted(g):
+    g.adata.obsm["clusters"] = pd.get_dummies(g.adata.obs["clusters"]).astype(float)
+    g.adata.obs["n_cells"] = np.arange(1, g.adata.n_obs + 1, dtype=float)
+    return g.plot_macrostate_composition({"obsm": "clusters"}, weight_key="n_cells", show=False)
+
+
 class TestMacrostateComposition:
-    @compare(kind="gpcca")
+    # --- visual regression: the stacked-bar baseline ---
+    @compare(kind="gpcca", tol=STRICT_TOL)
     def test_msc_default(self, mc: GPCCA, fpath: str):
         mc.plot_macrostate_composition("clusters", dpi=DPI, save=fpath)
 
-    @compare(kind="gpcca")
-    def test_msc_width(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostate_composition("clusters", dpi=DPI, save=fpath, width=0.2)
+    # --- parameter plumbing: assert on the returned Axes, not on pixels ---
+    @pytest.mark.parametrize(
+        ("kwargs", "check"),
+        [
+            pytest.param({"title": "foobar"}, lambda ax: ax.get_title() == "foobar", id="title"),
+            pytest.param({"width": 0.2}, lambda ax: {round(p.get_width(), 3) for p in ax.patches} == {0.2}, id="width"),
+            pytest.param({"legend_loc": "upper left out"}, lambda ax: _has_legend(ax.figure), id="legend_loc"),
+        ],
+    )
+    def test_msc_knob(self, adata_gpcca_fwd, kwargs, check):
+        _, g = adata_gpcca_fwd
+        ax = g.plot_macrostate_composition("clusters", show=False, **kwargs)
+        assert check(ax)
+        plt.close("all")
 
-    @compare(kind="gpcca")
-    def test_msc_title(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostate_composition("clusters", dpi=DPI, save=fpath, title="foobar")
-
-    @compare(kind="gpcca")
-    def test_msc_labelrot(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostate_composition("clusters", dpi=DPI, save=fpath, labelrot=0)
-
-    @compare(kind="gpcca")
-    def test_msc_legend_loc(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostate_composition("clusters_enlarged", dpi=DPI, save=fpath, legend_loc="upper left out")
-
-    @compare(kind="gpcca")
-    def test_msc_obsm(self, mc: GPCCA, fpath: str):
-        # per-observation proportions (rows sum to 1); reuse `clusters` categories/colors
-        mc.adata.obsm["clusters"] = pd.get_dummies(mc.adata.obs["clusters"]).astype(float)
-        mc.plot_macrostate_composition({"obsm": "clusters"}, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_msc_obsm_weighted(self, mc: GPCCA, fpath: str):
-        mc.adata.obsm["clusters"] = pd.get_dummies(mc.adata.obs["clusters"]).astype(float)
-        mc.adata.obs["n_cells"] = np.arange(1, mc.adata.n_obs + 1, dtype=float)
-        mc.plot_macrostate_composition({"obsm": "clusters"}, weight_key="n_cells", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_msc_obs_dict(self, mc: GPCCA, fpath: str):
-        # explicit `{"obs": ...}` is equivalent to passing the bare string
-        mc.plot_macrostate_composition({"obs": "clusters"}, dpi=DPI, save=fpath)
+    # --- behaviour coverage: assert the call runs and returns an Axes ---
+    # (obsm proportions and weighting are value-checked in the tests below.)
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda g: g.plot_macrostate_composition("clusters", labelrot=0, show=False), id="labelrot"),
+            pytest.param(lambda g: g.plot_macrostate_composition({"obs": "clusters"}, show=False), id="obs_dict"),
+            pytest.param(_msc_obsm, id="obsm"),
+            pytest.param(_msc_obsm_weighted, id="obsm_weighted"),
+        ],
+    )
+    def test_msc_runs(self, adata_gpcca_fwd, call):
+        _, g = adata_gpcca_fwd
+        ax = call(g)
+        assert isinstance(ax, plt.Axes)
+        plt.close("all")
 
     @staticmethod
     def _bar_totals(ax) -> np.ndarray:
