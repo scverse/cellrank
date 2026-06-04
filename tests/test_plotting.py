@@ -1542,76 +1542,95 @@ class TestGPCCA:
         assert fig.axes
 
 
+def _draw(call):
+    """Run a plotting call that draws on the current figure and return that figure."""
+    plt.close("all")
+    call()
+    return plt.gcf()
+
+
+def _model_fig(adata, gene=None, lineage="1", *, ci=True, prepare_kwargs=None, **plot_kwargs):
+    """Prepare/fit/predict a model and return its plotted figure (for smoke / introspection)."""
+    model = create_model(adata)
+    model.prepare(gene if gene is not None else adata.var_names[0], lineage, "latent_time", **(prepare_kwargs or {}))
+    model.fit().predict()
+    if ci:
+        model.confidence_interval()
+    return model.plot(dpi=DPI, return_fig=True, **plot_kwargs)
+
+
+def _model_obs_data_key(adata):
+    gene = adata.X[:, 0]
+    adata.obs["foo"] = gene.toarray() if sp.issparse(gene) else gene
+    return _model_fig(adata, gene="foo", prepare_kwargs={"data_key": "obs"})
+
+
+def _model_one_lineage(adata):
+    adata.obsm[Key.obsm.fate_probs(False)] = Lineage(np.ones((adata.n_obs, 1)), names=["foo"])
+    return _model_fig(adata, lineage="foo", prepare_kwargs={"n_test_points": 100}, conf_int=True)
+
+
 class TestLineage:
-    @compare(kind="lineage")
+    # --- visual regression: the canonical pie ---
+    @compare(kind="lineage", tol=STRICT_TOL)
     def test_pie(self, lineage: cr.Lineage, fpath: str):
         lineage.plot_pie(np.mean, dpi=DPI, save=fpath)
 
-    @compare(kind="lineage")
-    def test_pie_reduction(self, lineage: cr.Lineage, fpath: str):
-        lineage.plot_pie(np.var, dpi=DPI, save=fpath)
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    def test_pie_title(self, lineage: cr.Lineage):
+        assert _any_title(_draw(lambda: lineage.plot_pie(np.mean, title="FOOBAR")), "FOOBAR")
 
-    @compare(kind="lineage")
-    def test_pie_title(self, lineage: cr.Lineage, fpath: str):
-        lineage.plot_pie(np.mean, title="FOOBAR", dpi=DPI, save=fpath)
-
-    @compare(kind="lineage")
-    def test_pie_t(self, lineage: cr.Lineage, fpath: str):
-        lineage.T.plot_pie(np.mean, dpi=DPI, save=fpath)
-
-    @compare(kind="lineage")
-    def test_pie_autopct_none(self, lineage: cr.Lineage, fpath: str):
-        lineage.T.plot_pie(np.mean, dpi=DPI, save=fpath, autopct=None)
-
-    @compare(kind="lineage")
-    def test_pie_legend_loc(self, lineage: cr.Lineage, fpath: str):
-        lineage.plot_pie(np.mean, dpi=DPI, save=fpath, legend_loc="best")
-
-    @compare(kind="lineage")
-    def test_pie_legend_loc_one(self, lineage: cr.Lineage, fpath: str):
-        lineage.plot_pie(np.mean, dpi=DPI, save=fpath, legend_loc=None)
-
-    @compare(kind="lineage")
-    def test_pie_legend_kwargs(self, lineage: cr.Lineage, fpath: str):
-        lineage.plot_pie(
-            np.mean,
-            dpi=DPI,
-            save=fpath,
-            legend_loc="best",
-            legend_kwargs={"fontsize": 20},
-        )
+    # --- behaviour coverage: assert the call runs and produces a figure ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda lin: _draw(lambda: lin.plot_pie(np.var)), id="reduction"),
+            pytest.param(lambda lin: _draw(lambda: lin.T.plot_pie(np.mean)), id="transpose"),
+            pytest.param(lambda lin: _draw(lambda: lin.T.plot_pie(np.mean, autopct=None)), id="autopct_none"),
+            pytest.param(lambda lin: _draw(lambda: lin.plot_pie(np.mean, legend_loc="best")), id="legend_loc"),
+            pytest.param(lambda lin: _draw(lambda: lin.plot_pie(np.mean, legend_loc=None)), id="legend_none"),
+            pytest.param(
+                lambda lin: _draw(lambda: lin.plot_pie(np.mean, legend_loc="best", legend_kwargs={"fontsize": 20})),
+                id="legend_kwargs",
+            ),
+        ],
+    )
+    def test_pie_runs(self, lineage: cr.Lineage, call):
+        assert call(lineage).axes
+        plt.close("all")
 
 
 class TestLineageDrivers:
-    @compare(kind="gpcca")
+    # --- visual regression: the driver grid ---
+    @compare(kind="gpcca", tol=STRICT_TOL)
     def test_drivers_n_genes(self, mc: GPCCA, fpath: str):
         mc.plot_lineage_drivers("0", n_genes=5, dpi=DPI, save=fpath)
 
-    @compare(kind="gpcca")
-    def test_drivers_ascending(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers("0", ascending=True, dpi=DPI, save=fpath)
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    def test_drivers_cmap(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        assert _any_cmap(_draw(lambda: g.plot_lineage_drivers("0", cmap="inferno")), "inferno")
 
-    @compare(kind="gpcca_bwd")
-    def test_drivers_backward(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers("0", ncols=2, dpi=DPI, save=fpath)
+    def test_drivers_title_fmt(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        fig = _draw(lambda: g.plot_lineage_drivers("0", title_fmt="{gene} qval={qval} corr={corr}"))
+        assert any("qval=" in ax.get_title() and "corr=" in ax.get_title() for ax in fig.axes)
 
-    @compare(kind="gpcca")
-    def test_drivers_cmap(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers("0", cmap="inferno", dpi=DPI, save=fpath)
+    # --- behaviour coverage: assert the call runs and produces a figure ---
+    def test_drivers_ascending_runs(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        assert _draw(lambda: g.plot_lineage_drivers("0", ascending=True)).axes
+        plt.close("all")
 
-    @compare(kind="gpcca")
-    def test_drivers_title_fmt(self, mc: GPCCA, fpath: str):
-        mc.plot_lineage_drivers(
-            "0",
-            cmap="inferno",
-            title_fmt="{gene} qval={qval} corr={corr}",
-            dpi=DPI,
-            save=fpath,
-        )
+    def test_drivers_backward_runs(self, adata_gpcca_bwd):
+        _, g = adata_gpcca_bwd
+        assert _draw(lambda: g.plot_lineage_drivers("0", ncols=2)).axes
+        plt.close("all")
 
 
 class TestModel:
-    @compare()
+    # --- visual regression: default trend + the lineage-probability rendering ---
+    @compare(tol=STRICT_TOL)
     def test_model_default(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         model.prepare(adata.var_names[0], "1", "latent_time")
@@ -1619,177 +1638,100 @@ class TestModel:
         model.confidence_interval()
         model.plot(save=fpath, dpi=DPI)
 
-    @compare(kind="bwd")
-    def test_model_default_bwd(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        model.prepare(adata.var_names[0], "0", "latent_time", backward=True)
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(save=fpath, dpi=DPI)
-
-    @compare()
-    def test_model_obs_data_key(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        gene = adata.X[:, 0]
-        adata.obs["foo"] = gene.toarray() if sp.issparse(gene) else gene
-
-        model.prepare("foo", "1", "latent_time", data_key="obs")
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(save=fpath, dpi=DPI)
-
-    @compare()
-    def test_model_no_lineage(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        model.prepare(adata.var_names[0], None, "latent_time")
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(save=fpath, dpi=DPI)
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_model_no_lineage_show_lin_probs(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         model.prepare(adata.var_names[0], None, "latent_time")
         model.fit().predict()
         model.plot(save=fpath, dpi=DPI, lineage_probability=True)
 
-    @compare()
-    def test_model_no_legend(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        model.prepare(adata.var_names[0], "1", "latent_time")
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(save=fpath, dpi=DPI, loc=None)
+    # --- behaviour coverage: assert the call runs and returns a figure ---
+    @pytest.mark.parametrize(
+        "setup",
+        [
+            pytest.param(_model_obs_data_key, id="obs_data_key"),
+            pytest.param(_model_one_lineage, id="one_lineage"),
+            pytest.param(lambda a: _model_fig(a, lineage=None), id="no_lineage"),
+            pytest.param(lambda a: _model_fig(a, loc=None), id="no_legend"),
+            pytest.param(
+                lambda a: _model_fig(a, hide_cells=False, conf_int=True, lineage_probability=True),
+                id="show_lin_prob_cells_ci",
+            ),
+            pytest.param(
+                lambda a: _model_fig(
+                    a,
+                    hide_cells=True,
+                    conf_int=True,
+                    lineage_probability=True,
+                    lineage_probability_conf_int=True,
+                ),
+                id="show_lin_prob_cells_lineage_ci",
+            ),
+        ],
+    )
+    def test_model_runs(self, adata_gpcca_fwd, setup):
+        adata, _ = adata_gpcca_fwd
+        assert isinstance(setup(adata), plt.Figure)
+        plt.close("all")
 
-    # TODO: parametrize (hide cells, ci)
-    @compare()
-    def test_model_show_lin_prob_cells_ci(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        model.prepare(adata.var_names[0], "1", "latent_time")
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(
-            save=fpath,
-            dpi=DPI,
-            hide_cells=False,
-            conf_int=True,
-            lineage_probability=True,
-        )
-
-    @compare()
-    def test_model_show_lin_prob_cells_lineage_ci(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        model.prepare(adata.var_names[0], "1", "latent_time")
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(
-            save=fpath,
-            dpi=DPI,
-            hide_cells=True,
-            conf_int=True,
-            lineage_probability=True,
-            lineage_probability_conf_int=True,
-        )
-
-    @compare()
-    def test_model_1_lineage(self, adata: AnnData, fpath: str):
-        adata.obsm[Key.obsm.fate_probs(False)] = Lineage(np.ones((adata.n_obs, 1)), names=["foo"])
-        model = create_model(adata)
-        model = model.prepare(adata.var_names[0], "foo", "latent_time", n_test_points=100).fit()
-        model.fit().predict()
-        model.confidence_interval()
-        model.plot(save=fpath, dpi=DPI, conf_int=True)
+    def test_model_default_bwd_runs(self, adata_gpcca_bwd):
+        adata, _ = adata_gpcca_bwd
+        fig = _model_fig(adata, lineage="0", prepare_kwargs={"backward": True})
+        assert isinstance(fig, plt.Figure)
+        plt.close("all")
 
 
 @gamr_skip
 class TestGAMR:
-    @compare(kind="gamr")
-    def test_gamr_default(self, model: GAMR, fpath: str):
-        model.prepare(model.adata.var_names[0], "1", "latent_time")
-        model.fit().predict()
-        model.plot(
-            save=fpath,
-            dpi=DPI,
-        )
+    # R-backed (mgcv) fits are skipped unless rpy2 + mgcv are available and run only in the
+    # dedicated CI job. The trend rendering itself is visually covered by TestModel, so these
+    # assert that the R backend fits and feeds the plot without a pixel baseline.
+    @pytest.mark.parametrize(
+        ("predict_kwargs", "plot_kwargs"),
+        [
+            pytest.param({}, {}, id="default"),
+            pytest.param({"level": 0.5}, {"conf_int": True}, id="ci_50"),
+            pytest.param({"level": None}, {"conf_int": False}, id="no_ci"),
+            pytest.param({"level": 0.95}, {"cbar": False}, id="no_cbar"),
+            pytest.param(
+                {"level": 0.95},
+                {"lineage_probability": True, "lineage_probability_conf_int": True},
+                id="lineage_prob",
+            ),
+        ],
+    )
+    def test_gamr_plot_runs(self, gamr_model: GAMR, predict_kwargs, plot_kwargs):
+        gamr_model.prepare(gamr_model.adata.var_names[0], "1", "latent_time")
+        gamr_model.fit().predict(**predict_kwargs)
+        assert isinstance(gamr_model.plot(dpi=DPI, return_fig=True, **plot_kwargs), plt.Figure)
+        plt.close("all")
 
-    @compare(kind="gamr")
-    def test_gamr_ci_50(self, model: GAMR, fpath: str):
-        model.prepare(model.adata.var_names[0], "1", "latent_time")
-        model.fit().predict(level=0.5)
-        model.plot(
-            conf_int=True,
-            save=fpath,
-            dpi=DPI,
-        )
-
-    @compare(kind="gamr")
-    def test_gamr_no_ci(self, model: GAMR, fpath: str):
-        model.prepare(model.adata.var_names[0], "1", "latent_time")
-        model.fit().predict(level=None)
-        model.plot(
-            conf_int=False,
-            save=fpath,
-            dpi=DPI,
-        )
-
-    @compare(kind="gamr")
-    def test_gamr_no_cbar(self, model: GAMR, fpath: str):
-        model.prepare(model.adata.var_names[0], "1", "latent_time")
-        model.fit().predict(level=0.95)
-        model.plot(
-            cbar=False,
-            save=fpath,
-            dpi=DPI,
-        )
-
-    @compare(kind="gamr")
-    def test_gamr_lineage_prob(self, model: GAMR, fpath: str):
-        model.prepare(model.adata.var_names[0], "1", "latent_time")
-        model.fit().predict(level=0.95)
-        model.plot(
-            lineage_probability=True,
-            lineage_probability_conf_int=True,
-            save=fpath,
-            dpi=DPI,
-        )
-
-    @compare(kind="gamr")
-    def test_trends_gam_ci_100(self, model: GAMR, fpath: str):
-        cr.pl.gene_trends(
-            model.adata,
-            model,
+    @pytest.mark.parametrize("conf_int", [1, 0.2], ids=["ci_100", "ci_20"])
+    def test_gamr_trends_runs(self, gamr_model: GAMR, conf_int):
+        fig = cr.pl.gene_trends(
+            gamr_model.adata,
+            gamr_model,
             GENES[:3],
             time_key="latent_time",
-            conf_int=1,
+            conf_int=conf_int,
             backward=False,
             data_key="Ms",
             dpi=DPI,
-            save=fpath,
+            return_figure=True,
         )
-
-    @compare(kind="gamr")
-    def test_trends_gam_ci_20(self, model: GAMR, fpath: str):
-        cr.pl.gene_trends(
-            model.adata,
-            model,
-            GENES[:3],
-            time_key="latent_time",
-            conf_int=0.2,
-            backward=False,
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
-        )
+        assert isinstance(fig, plt.Figure)
+        plt.close("all")
 
 
 class TestComposition:
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_composition(self, adata: AnnData, fpath: str):
         cr.pl._utils.composition(adata, "clusters", dpi=DPI, save=fpath)
 
-    @compare()
-    def test_composition_kwargs_autopct(self, adata: AnnData, fpath: str):
-        cr.pl._utils.composition(adata, "clusters", dpi=DPI, save=fpath, autopct="%1.0f%%")
+    def test_composition_autopct_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _draw(lambda: cr.pl._utils.composition(adata, "clusters", autopct="%1.0f%%")).axes
+        plt.close("all")
 
 
 class TestFittedModel:
