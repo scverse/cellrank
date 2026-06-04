@@ -3,6 +3,7 @@ import logging
 import os
 import pathlib
 import types
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -182,6 +183,7 @@ class RealTimeKernel(UnidirectionalKernel):
         cache_params = dict(kwargs)
         cache_params["threshold"] = threshold
         cache_params["self_transitions"] = str(self_transitions)
+        cache_params["conn_weight"] = conn_weight
         if self._reuse_cache(cache_params):
             return self
 
@@ -302,6 +304,11 @@ class RealTimeKernel(UnidirectionalKernel):
     ) -> "RealTimeKernel":
         """Construct the kernel from Waddington-OT :cite:`schiebinger:19`.
 
+        .. deprecated:: 2.2
+            Will be removed in CellRank 3.0. Waddington-OT is unmaintained; use :meth:`from_moscot` instead.
+            Pre-computed Waddington-OT couplings can still be loaded manually and passed to
+            :class:`~cellrank.kernels.RealTimeKernel` via the ``couplings`` argument.
+
         Parameters
         ----------
         adata
@@ -333,6 +340,12 @@ class RealTimeKernel(UnidirectionalKernel):
             rtk = cr.kernels.RealTimeKernel.from_wot(adata, path="tmaps/", time_key="day")
             rtk = rtk.compute_transition_matrix()
         """
+        warnings.warn(
+            "`RealTimeKernel.from_wot()` is deprecated and will be removed in CellRank 3.0. "
+            "Use `RealTimeKernel.from_moscot()` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         path = pathlib.Path(path)
         dtype = type(adata.obs[time_key].iloc[0])
 

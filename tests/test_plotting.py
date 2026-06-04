@@ -1853,6 +1853,37 @@ class TestGeneTrend:
         np.testing.assert_array_equal(models.columns, [str(i) for i in range(2)])
         assert np.all(models.astype(bool))
 
+    def test_reuse_returned_models(self, adata_cflare: AnnData):
+        model = create_model(adata_cflare)
+        models = cr.pl.gene_trends(
+            adata_cflare,
+            model,
+            GENES[:5],
+            data_key="Ms",
+            lineages=["0", "1"],
+            time_key="latent_time",
+            dpi=DPI,
+            return_models=True,
+        )
+
+        # passing the fitted models back reuses the computed trends instead of refitting
+        reused = cr.pl.gene_trends(
+            adata_cflare,
+            models,
+            GENES[:5],
+            data_key="Ms",
+            lineages=["0", "1"],
+            time_key="latent_time",
+            dpi=DPI,
+            return_models=True,
+        )
+
+        for gene in GENES[:5]:
+            for ln in ["0", "1"]:
+                assert isinstance(reused[gene][ln], cr.models.FittedModel)
+                np.testing.assert_array_equal(reused[gene][ln].x_test, models[gene][ln].x_test)
+                np.testing.assert_array_equal(reused[gene][ln].y_test, models[gene][ln].y_test)
+
     def test_return_models_with_failures(self, adata_cflare: AnnData):
         fm = create_failed_model(adata_cflare)
         models = cr.pl.gene_trends(

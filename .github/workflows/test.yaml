@@ -84,7 +84,7 @@ jobs:
         uvx hatch run ${{ matrix.env.name }}:cov-report
         uvx hatch run ${{ matrix.env.name }}:coverage xml
     - name: Upload coverage
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
@@ -101,7 +101,7 @@ jobs:
       with:
         filter: blob:none
         fetch-depth: 0
-    - uses: conda-incubator/setup-miniconda@v3
+    - uses: conda-incubator/setup-miniconda@v4
       with:
         miniforge-version: latest
         python-version: '3.12'
@@ -123,7 +123,7 @@ jobs:
         MPLBACKEND: agg
       run: python -m pytest tests/ -v --timeout=600 --cov --cov-report=xml
     - name: Upload coverage
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         flags: conda
