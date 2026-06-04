@@ -62,6 +62,11 @@ class CoarseTOrder(ModeEnum):
     STAT_DIST = enum.auto()
 
 
+class StatesAggregation(ModeEnum):
+    TOP_N = enum.auto()
+    UNION = enum.auto()
+
+
 @d.dedent
 class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
     """Generalized Perron Cluster Cluster Analysis (GPCCA) :cite:`reuter:18,reuter:19`.
@@ -441,6 +446,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         allow_overlap: bool = False,
         cluster_key: str | Mapping[str, str] | None = None,
         weight_key: str | None = None,
+        agg: Literal["top_n", "union"] = StatesAggregation.TOP_N,
         **kwargs: Any,
     ) -> "GPCCA":
         """Set the :attr:`terminal_states`.
@@ -465,6 +471,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         weight_key
             Per-observation weights, only used when ``cluster_key`` points to
             :attr:`~anndata.AnnData.obsm`; see :meth:`compute_macrostates`.
+        %(agg)s
         kwargs
             Additional keyword arguments.
 
@@ -483,6 +490,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
         if n_cells <= 0:
             raise ValueError(f"Expected `n_cells` to be positive, found `{n_cells}`.")
+        agg = StatesAggregation(agg)
 
         memberships = self.macrostates_memberships
         if memberships is None:
@@ -496,9 +504,15 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             raise ValueError("No macrostates have been selected.")
 
         is_singleton = memberships.shape[1] == 1
-        memberships = memberships[list(states)].copy()
+        macrostates_memberships, selected = memberships, list(states)
+        memberships = memberships[selected].copy()
 
-        states = self._create_states(memberships, n_cells=n_cells, check_row_sums=False)
+        if agg == StatesAggregation.UNION and not is_singleton:
+            states = self._create_aggregated_states(
+                macrostates_memberships, states=selected, group_labels=list(memberships.names), n_cells=n_cells
+            )
+        else:
+            states = self._create_states(memberships, n_cells=n_cells, check_row_sums=False)
         if is_singleton:
             colors = self._macrostates.colors.copy()
             probs = memberships.X.squeeze() / memberships.X.max()
@@ -527,6 +541,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         allow_overlap: bool = False,
         cluster_key: str | Mapping[str, str] | None = None,
         weight_key: str | None = None,
+        agg: Literal["top_n", "union"] = StatesAggregation.TOP_N,
         **kwargs: Any,
     ) -> "GPCCA":
         """Set the :attr:`initial_states`.
@@ -551,6 +566,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         weight_key
             Per-observation weights, only used when ``cluster_key`` points to
             :attr:`~anndata.AnnData.obsm`; see :meth:`compute_macrostates`.
+        %(agg)s
         kwargs
             Additional keyword arguments.
 
@@ -569,6 +585,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
 
         if n_cells <= 0:
             raise ValueError(f"Expected `n_cells` to be positive, found `{n_cells}`.")
+        agg = StatesAggregation(agg)
 
         memberships = self.macrostates_memberships
         if memberships is None:
@@ -582,9 +599,15 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             raise ValueError("No macrostates have been selected.")
 
         is_singleton = memberships.shape[1] == 1
-        memberships = memberships[list(states)].copy()
+        macrostates_memberships, selected = memberships, list(states)
+        memberships = memberships[selected].copy()
 
-        states = self._create_states(memberships, n_cells=n_cells, check_row_sums=False)
+        if agg == StatesAggregation.UNION and not is_singleton:
+            states = self._create_aggregated_states(
+                macrostates_memberships, states=selected, group_labels=list(memberships.names), n_cells=n_cells
+            )
+        else:
+            states = self._create_states(memberships, n_cells=n_cells, check_row_sums=False)
         if is_singleton:
             colors = self._macrostates.colors.copy()
             probs = memberships.X.squeeze() / memberships.X.max()
@@ -1345,6 +1368,49 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         )
 
         return (states, not_enough_cells) if return_not_enough_cells else states
+
+    def _create_aggregated_states(
+        self,
+        memberships: Lineage,
+        states: Sequence[str],
+        group_labels: Sequence[str],
+        n_cells: int,
+    ) -> pd.Series:
+        """Select the ``n_cells`` most likely cells of *each* macrostate and union them per (aggregated) state.
+
+        In contrast to selecting the most likely cells of the *combined* membership, this guarantees that every
+        constituent macrostate is represented, even if one of them dominates the combined membership.
+
+        Parameters
+        ----------
+        memberships
+            Memberships of the individual macrostates.
+        states
+            Selected states, where each entry may combine several macrostates, e.g. ``'Alpha, Beta'``.
+        group_labels
+            Canonical label of each entry in ``states`` (i.e. the names of the aggregated ``memberships``).
+        n_cells
+            Number of most likely cells to select from each individual macrostate.
+
+        Returns
+        -------
+        Categorical series assigning the selected cells to the aggregated states.
+        """
+        constituents: list[str] = []
+        mapping: dict[str, str] = {}
+        for state, label in zip(states, group_labels):
+            for name in sorted({n.strip(" ") for n in str(state).strip(" ,").split(",")}):
+                constituents.append(name)
+                mapping[name] = label
+
+        per_macrostate = self._create_states(memberships[constituents], n_cells=n_cells, check_row_sums=False)
+        aggregated = per_macrostate.map(mapping)
+        # preserve the canonical order and drop states that ended up with no cells
+        present = [label for label in group_labels if label in set(aggregated.dropna())]
+        return pd.Series(
+            pd.Categorical(aggregated.to_numpy(), categories=present),
+            index=per_macrostate.index,
+        )
 
     def _validate_n_states(self, n_states: int) -> int:
         if self._invalid_n_states is not None and n_states in self._invalid_n_states:

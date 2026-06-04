@@ -568,6 +568,86 @@ class TestGPCCA:
 
         _check_fate_probs(mc)
 
+    def test_set_terminal_states_agg_union(self, adata_large: AnnData):
+        vk = VelocityKernel(adata_large).compute_transition_matrix(softmax_scale=4)
+        ck = ConnectivityKernel(adata_large).compute_transition_matrix()
+        terminal_kernel = 0.8 * vk + 0.2 * ck
+
+        mc = cr.estimators.GPCCA(terminal_kernel)
+        mc.compute_schur(n_components=10, method="krylov")
+        mc.compute_macrostates(n_states=4)
+
+        names = list(mc.macrostates_memberships.names)
+        a, b, rest = names[0], names[1], names[2:]
+        combo = f"{a}, {b}"
+        n_cells = 5
+
+        # cells representing `a` and `b` when selected individually
+        mc.set_terminal_states(states=names, n_cells=n_cells)
+        ts = mc.terminal_states
+        a_cells = set(ts.index[ts == a])
+        b_cells = set(ts.index[ts == b])
+
+        # `union` keeps the most likely cells of *each* macrostate
+        mc.set_terminal_states(states=[combo, *rest], n_cells=n_cells, agg="union")
+        ts_union = mc.terminal_states
+        (combo_label,) = (x for x in ts_union.cat.categories if x not in rest)
+        union_cells = set(ts_union.index[ts_union == combo_label])
+
+        assert union_cells == a_cells | b_cells
+        assert len(union_cells) > n_cells  # both macrostates contribute
+
+        # `top_n` selects from the *combined* membership, so one macrostate can dominate
+        mc.set_terminal_states(states=[combo, *rest], n_cells=n_cells, agg="top_n")
+        ts_top = mc.terminal_states
+        (combo_label_top,) = (x for x in ts_top.cat.categories if x not in rest)
+        top_cells = set(ts_top.index[ts_top == combo_label_top])
+
+        assert len(top_cells) <= n_cells
+        assert len(top_cells) < len(union_cells)
+
+        mc.compute_fate_probabilities()
+        mc.compute_lineage_priming()
+        _check_fate_probs(mc)
+
+    def test_set_terminal_states_invalid_agg(self, adata_large: AnnData):
+        vk = VelocityKernel(adata_large).compute_transition_matrix(softmax_scale=4)
+        ck = ConnectivityKernel(adata_large).compute_transition_matrix()
+        terminal_kernel = 0.8 * vk + 0.2 * ck
+
+        mc = cr.estimators.GPCCA(terminal_kernel)
+        mc.compute_schur(n_components=10, method="krylov")
+        mc.compute_macrostates(n_states=2)
+        with pytest.raises(ValueError, match=r"Invalid option"):
+            mc.set_terminal_states(agg="foobar")
+
+    def test_set_initial_states_agg_union(self, adata_large: AnnData):
+        vk = VelocityKernel(adata_large, backward=False).compute_transition_matrix(softmax_scale=4)
+        ck = ConnectivityKernel(adata_large).compute_transition_matrix()
+        initial_kernel = 0.8 * vk + 0.2 * ck
+
+        mc = cr.estimators.GPCCA(initial_kernel)
+        mc.compute_schur(n_components=10, method="krylov")
+        mc.compute_macrostates(n_states=4)
+
+        names = list(mc.macrostates_memberships.names)
+        a, b, rest = names[0], names[1], names[2:]
+        combo = f"{a}, {b}"
+        n_cells = 5
+
+        mc.set_initial_states(states=names, n_cells=n_cells)
+        is_ = mc.initial_states
+        a_cells = set(is_.index[is_ == a])
+        b_cells = set(is_.index[is_ == b])
+
+        mc.set_initial_states(states=[combo, *rest], n_cells=n_cells, agg="union")
+        is_union = mc.initial_states
+        (combo_label,) = (x for x in is_union.cat.categories if x not in rest)
+        union_cells = set(is_union.index[is_union == combo_label])
+
+        assert union_cells == a_cells | b_cells
+        assert len(union_cells) > n_cells
+
     def test_set_terminal_states_from_macrostates_non_positive_cells(self, adata_large: AnnData):
         vk = VelocityKernel(adata_large).compute_transition_matrix(softmax_scale=4)
         ck = ConnectivityKernel(adata_large).compute_transition_matrix()

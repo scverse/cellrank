@@ -192,6 +192,15 @@ allow_overlap = """\
 allow_overlap
     Whether to allow overlapping names between initial and terminal states.
 """
+_agg = """\
+agg
+    How to select the cells representing each state when names are combined, e.g., ``['Alpha, Beta', 'Epsilon']``.
+    Only relevant when aggregating multiple macrostates into one state. Valid options are:
+
+    - ``'top_n'`` - select the ``n_cells`` most confident cells of the *combined* membership. A dominant
+      macrostate can crowd out the others, so the cells may not be representative of the combined state.
+    - ``'union'`` - select the ``n_cells`` most confident cells of *each* macrostate and take their union,
+      so every constituent macrostate is represented."""
 
 
 def inject_docs(**kwargs: Any):
@@ -247,4 +256,5 @@ d = DocstringProcessor(
     absorption_utils=_absorption_utils,
     which=which,
     allow_overlap=allow_overlap,
+    agg=_agg,
 )
