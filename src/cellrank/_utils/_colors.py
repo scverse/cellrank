@@ -150,6 +150,77 @@ def _get_bg_fg_colors(color, sat_scale: float | None = None) -> tuple[str, str]:
     )
 
 
+def _names_and_colors_from_association(
+    association_df: pd.DataFrame,
+    cats_reference: pd.Index,
+    colors_reference: np.ndarray | None = None,
+    en_cutoff: float | None = None,
+) -> pd.Series | tuple[pd.Series, list[Any]]:
+    """Turn a query-by-reference association table into unique names and colors.
+
+    Shared tail of :func:`_map_names_and_colors` and :func:`_map_names_and_colors_from_proportions`.
+    ``association_df`` is indexed by the query categories with one column per reference category;
+    each query category is named after the reference category with the largest association, then
+    duplicate names are made unique with ``_1, _2, ...`` suffixes (and colors shifted to match).
+    """
+    process_colors = colors_reference is not None
+
+    # the helper appends bookkeeping columns ("name"/"color"/"entropy"); a categorical column
+    # index (e.g. from `pd.get_dummies` of a categorical) would reject those, so normalize it
+    if isinstance(association_df.columns, pd.CategoricalIndex):
+        association_df = association_df.copy()
+        association_df.columns = association_df.columns.tolist()
+
+    # find the mapping which maximizes overlap
+    names_query = association_df.T.idxmax()
+    if en_cutoff is not None:
+        association_df["entropy"] = st.entropy(association_df.T)
+    association_df["name"] = names_query
+
+    # assign query colors
+    if process_colors:
+        association_df["color"] = colors_query = [
+            colors_reference[np.where(cats_reference == name)[0][0]] for name in names_query
+        ]
+
+    # next, we need to make sure that we have unique names and colors. In a first step, compute how many repetitions
+    # we have
+    names_query_series = pd.Series(names_query, dtype="category")
+    frequ = {key: np.sum(names_query == key) for key in names_query_series.cat.categories}
+
+    # warning: do NOT use np.array - if I pass for e.g. colors ['red'], the dtype will be '<U3'
+    # but _create_colors convert them to hex, which will leave them trimmed to #ff or similar
+    names_query_new = pd.Series(names_query.copy())
+    if process_colors:
+        colors_query_new = pd.Series(colors_query.copy())
+
+    # Create unique names by adding suffixes "..._1, ..._2" etc and unique colors by shifting the original color
+    for key, value in frequ.items():
+        if value == 1:
+            continue  # already unique, skip
+        # deal with non-unique names
+        unique_names = [f"{key}_{rep}" for rep in np.arange(1, value + 1)]
+        # .value because of pandas 1.0.0
+        names_query_new.iloc[(names_query_series == key).values] = unique_names
+        if process_colors:
+            color = association_df[association_df["name"] == key]["color"].values[0]
+            shifted_colors = _create_colors(color, value, saturation_range=None)
+            colors_query_new.iloc[(names_query_series == key).values] = shifted_colors
+
+    # warnings: if it's categorical and assigning to `.cat.categories`, it will
+    # take the categorical information, making the 2nd line below necessary
+    names_query_new = names_query_new.astype("category")
+    names_query_new = names_query_new.cat.reorder_categories(np.array(names_query_new))
+
+    # issue a warning for mapping with high entropy
+    if en_cutoff is not None:
+        critical_cats = sorted(set(association_df.loc[association_df["entropy"] > en_cutoff, "name"].values))
+        if len(critical_cats) > 0:
+            logger.warning("The following states could not be mapped uniquely: `%s`", critical_cats)
+
+    return (names_query_new, list(_convert_to_hex_colors(colors_query_new))) if process_colors else names_query_new
+
+
 def _map_names_and_colors(
     series_reference: pd.Series,
     series_query: pd.Series,
@@ -220,54 +291,12 @@ def _map_names_and_colors(
         association_df.loc[cl] = row
     association_df = association_df.apply(pd.to_numeric)
 
-    # find the mapping which maximizes overlap
-    names_query = association_df.T.idxmax()
-    if en_cutoff is not None:
-        association_df["entropy"] = st.entropy(association_df.T)
-    association_df["name"] = names_query
-
-    # assign query colors
-    if process_colors:
-        association_df["color"] = colors_query = [
-            colors_reference[np.where(cats_reference == name)[0][0]] for name in names_query
-        ]
-
-    # next, we need to make sure that we have unique names and colors. In a first step, compute how many repetitions
-    # we have
-    names_query_series = pd.Series(names_query, dtype="category")
-    frequ = {key: np.sum(names_query == key) for key in names_query_series.cat.categories}
-
-    # warning: do NOT use np.array - if I pass for e.g. colors ['red'], the dtype will be '<U3'
-    # but _create_colors convert them to hex, which will leave them trimmed to #ff or similar
-    names_query_new = pd.Series(names_query.copy())
-    if process_colors:
-        colors_query_new = pd.Series(colors_query.copy())
-
-    # Create unique names by adding suffixes "..._1, ..._2" etc and unique colors by shifting the original color
-    for key, value in frequ.items():
-        if value == 1:
-            continue  # already unique, skip
-        # deal with non-unique names
-        unique_names = [f"{key}_{rep}" for rep in np.arange(1, value + 1)]
-        # .value because of pandas 1.0.0
-        names_query_new.iloc[(names_query_series == key).values] = unique_names
-        if process_colors:
-            color = association_df[association_df["name"] == key]["color"].values[0]
-            shifted_colors = _create_colors(color, value, saturation_range=None)
-            colors_query_new.iloc[(names_query_series == key).values] = shifted_colors
-
-    # warnings: if it's categorical and assigning to `.cat.categories`, it will
-    # take the categorical information, making the 2nd line below necessary
-    names_query_new = names_query_new.astype("category")
-    names_query_new = names_query_new.cat.reorder_categories(np.array(names_query_new))
-
-    # issue a warning for mapping with high entropy
-    if en_cutoff is not None:
-        critical_cats = sorted(set(association_df.loc[association_df["entropy"] > en_cutoff, "name"].values))
-        if len(critical_cats) > 0:
-            logger.warning("The following states could not be mapped uniquely: `%s`", critical_cats)
-
-    return (names_query_new, list(_convert_to_hex_colors(colors_query_new))) if process_colors else names_query_new
+    return _names_and_colors_from_association(
+        association_df=association_df,
+        cats_reference=cats_reference,
+        colors_reference=colors_reference if process_colors else None,
+        en_cutoff=en_cutoff,
+    )
 
 
 def _compute_mean_color(cols: list[str]) -> str:

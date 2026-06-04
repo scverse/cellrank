@@ -27,8 +27,13 @@ from cellrank._utils._enum import ModeEnum
 from cellrank._utils._key import Key
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import (
+    _aggregate_proportions,
+    _check_proportions,
     _eigengap,
     _fuzzy_to_discrete,
+    _obsm_proportion_weights,
+    _obsm_proportions,
+    _resolve_composition_key,
     _series_from_one_hot_matrix,
     save_fig,
 )
@@ -149,7 +154,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         self,
         n_states: int | Sequence[int] | None = None,
         n_cells: int | None = 30,
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         **kwargs: Any,
     ) -> "GPCCA":
         """Compute the macrostates.
@@ -162,7 +168,30 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             heuristic.
         %(n_cells)s
         cluster_key
-            If a key to cluster labels is given, names and colors of the states will be associated with the clusters.
+            If given, names and colors of the states will be associated with these reference annotations.
+            Either:
+
+            - a :class:`str` (or ``{"obs": <column>}``), a categorical column in
+              :attr:`~anndata.AnnData.obs`. Each macrostate is named after the dominant category
+              among its most-likely observations (unchanged behavior).
+            - ``{"obsm": <key>}``, where :attr:`adata.obsm[key] <anndata.AnnData.obsm>` is a
+              :class:`~pandas.DataFrame` whose columns are the categories and whose rows are
+              per-observation proportions summing to :math:`1` (e.g. cell-type or condition
+              fractions of aggregated samples). For each macrostate, the proportion rows of its
+              most-likely observations are summed (see ``weight_key`` for the weighting) and the
+              macrostate is named after the category with the largest resulting total.
+        weight_key
+            Only used when ``cluster_key`` points to :attr:`~anndata.AnnData.obsm`. Controls how
+            each observation's proportion row is weighted when summing proportions to pick a
+            macrostate's dominant category:
+
+            - :obj:`None` (default) - **every observation contributes equally**, with weight
+              :math:`1`, irrespective of any per-observation quantity.
+            - a key in :attr:`~anndata.AnnData.obs` - each observation's proportion row is scaled
+              by ``adata.obs[weight_key]`` before summing, so observations with larger weights
+              count proportionally more. The weights can be any per-observation quantity; a common
+              choice is the number of cells per aggregated sample, which makes naming reflect
+              cell-level rather than sample-level dominance.
         kwargs
             Keyword arguments for :meth:`compute_schur`.
 
@@ -184,6 +213,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             self._compute_one_macrostate(
                 n_cells=n_cells,
                 cluster_key=cluster_key,
+                weight_key=weight_key,
             )
             return self
 
@@ -221,6 +251,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             memberships=self._gpcca.memberships,
             n_cells=n_cells,
             cluster_key=cluster_key,
+            weight_key=weight_key,
             params=self._create_params(),
             time=_start,
         )
@@ -401,7 +432,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         states: str | Sequence[str] | dict[str, Sequence[str]] | pd.Series | None = None,
         n_cells: int = 30,
         allow_overlap: bool = False,
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         **kwargs: Any,
     ) -> "GPCCA":
         """Set the :attr:`terminal_states`.
@@ -421,9 +453,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         %(n_cells)s
         %(allow_overlap)s
         cluster_key
-            Key in :attr:`~anndata.AnnData.obs` to associate names and colors with :attr:`terminal_states`.
-            Each state will be given the name and color corresponding to the cluster it mostly overlaps with.
-            Only used when ``states`` is a :class:`dict` or :class:`~pandas.Series`.
+            Reference annotations to associate names and colors with :attr:`terminal_states`; see
+            :meth:`compute_macrostates`. Only used when ``states`` is a :class:`dict` or :class:`~pandas.Series`.
+        weight_key
+            Per-observation weights, only used when ``cluster_key`` points to
+            :attr:`~anndata.AnnData.obsm`; see :meth:`compute_macrostates`.
         kwargs
             Additional keyword arguments.
 
@@ -436,7 +470,9 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         - :attr:`terminal_states_memberships` - %(gpcca_term_states_memberships.summary)s
         """
         if isinstance(states, (dict, pd.Series)):
-            return super().set_terminal_states(states, cluster_key=cluster_key, allow_overlap=allow_overlap, **kwargs)
+            return super().set_terminal_states(
+                states, cluster_key=cluster_key, weight_key=weight_key, allow_overlap=allow_overlap, **kwargs
+            )
 
         if n_cells <= 0:
             raise ValueError(f"Expected `n_cells` to be positive, found `{n_cells}`.")
@@ -482,7 +518,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         states: str | Sequence[str] | dict[str, Sequence[str]] | pd.Series | None = None,
         n_cells: int = 30,
         allow_overlap: bool = False,
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         **kwargs: Any,
     ) -> "GPCCA":
         """Set the :attr:`initial_states`.
@@ -502,9 +539,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         %(n_cells)s
         %(allow_overlap)s
         cluster_key
-            Key in :attr:`~anndata.AnnData.obs` to associate names and colors with :attr:`initial_states`.
-            Each state will be given the name and color corresponding to the cluster it mostly overlaps with.
-            Only used when ``states`` is a :class:`dict` or :class:`~pandas.Series`.
+            Reference annotations to associate names and colors with :attr:`initial_states`; see
+            :meth:`compute_macrostates`. Only used when ``states`` is a :class:`dict` or :class:`~pandas.Series`.
+        weight_key
+            Per-observation weights, only used when ``cluster_key`` points to
+            :attr:`~anndata.AnnData.obsm`; see :meth:`compute_macrostates`.
         kwargs
             Additional keyword arguments.
 
@@ -517,7 +556,9 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         - :attr:`initial_states_memberships` - %(gpcca_init_states_memberships.summary)s
         """
         if isinstance(states, (pd.Series, dict)):
-            return super().set_initial_states(states, cluster_key=cluster_key, allow_overlap=allow_overlap, **kwargs)
+            return super().set_initial_states(
+                states, cluster_key=cluster_key, weight_key=weight_key, allow_overlap=allow_overlap, **kwargs
+            )
 
         if n_cells <= 0:
             raise ValueError(f"Expected `n_cells` to be positive, found `{n_cells}`.")
@@ -582,6 +623,11 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         -------
         Returns TSI score.
         """
+        if not (cluster_key is None or isinstance(cluster_key, str)):
+            # `cluster_key` is round-tripped through `.uns` for cache validity, so it must be serializable;
+            # the `{"obsm": ...}` proportion form supported by `compute_macrostates` is not allowed here.
+            raise TypeError(f"Expected `cluster_key` to be a `str` or `None`, found `{type(cluster_key).__name__!r}`.")
+
         tsi_precomputed = (self._tsi is not None) and (self._tsi[:, "number_of_macrostates"].X.max() >= n_macrostates)
         if terminal_states is not None:
             tsi_precomputed = tsi_precomputed and (set(self._tsi.uns["terminal_states"]) == set(terminal_states))
@@ -741,7 +787,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         self,
         n_states: int | Sequence[int] | None = None,
         n_cells: int | None = 30,
-        cluster_key: str | None = None,
+        cluster_key: str | Mapping[str, str] | None = None,
+        weight_key: str | None = None,
         **kwargs: Any,
     ) -> "GPCCA":
         """
@@ -775,7 +822,9 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         # call explicitly since `compute_macrostates` doesn't handle the case
         # when `minChi` is used for `n_states` and `self._gpcca` is uninitialized
         _ = self.compute_schur(n, **kwargs)
-        return self.compute_macrostates(n_states=n_states, cluster_key=cluster_key, n_cells=n_cells)
+        return self.compute_macrostates(
+            n_states=n_states, cluster_key=cluster_key, weight_key=weight_key, n_cells=n_cells
+        )
 
     @d.dedent
     @inject_docs(o=CoarseTOrder)
@@ -1113,7 +1162,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         if macrostates is None:
             raise RuntimeError("Compute macrostates first as `.compute_macrostates()`.")
 
-        source, name = self._resolve_composition_key(key)
+        source, name = _resolve_composition_key(key)
         if weight_key is not None and source != "obsm":
             raise ValueError("`weight_key` is only supported when `key` points to `adata.obsm`.")
 
@@ -1185,20 +1234,6 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         if not show:
             return ax
 
-    @staticmethod
-    def _resolve_composition_key(key: str | Mapping[str, str]) -> tuple[str, str]:
-        """Resolve ``key`` to a ``(source, name)`` pair, where ``source`` is ``'obs'`` or ``'obsm'``."""
-        if isinstance(key, str):
-            return "obs", key
-        if isinstance(key, Mapping):
-            if len(key) != 1:
-                raise ValueError(f"Expected `key` to have exactly one entry, found `{len(key)}`.")
-            ((source, name),) = key.items()
-            if source not in ("obs", "obsm"):
-                raise ValueError(f"Expected `key` to use `'obs'` or `'obsm'`, found `{source!r}`.")
-            return source, name
-        raise TypeError(f"Expected `key` to be a `str` or a `dict`, found `{type(key).__name__!r}`.")
-
     def _obs_composition(self, key: str, macrostates: pd.Series, mask: pd.Series) -> tuple[pd.DataFrame, pd.Index]:
         """Count each :attr:`~anndata.AnnData.obs` category per macrostate."""
         if key not in self.adata.obs:
@@ -1226,36 +1261,16 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         Each observation contributes its proportion row, so an unweighted bar height equals the number
         of observations in the macrostate -- the direct analog of the cell counts in :meth:`_obs_composition`.
         """
-        if key not in self.adata.obsm:
-            raise KeyError(f"Data not found in `adata.obsm[{key!r}]`.")
-        fractions = self.adata.obsm[key]
-        if not isinstance(fractions, pd.DataFrame):
-            raise TypeError(
-                f"Expected `adata.obsm[{key!r}]` to be a `pandas.DataFrame`, found `{type(fractions).__name__}`."
-            )
-        # align to obs_names positionally, ignoring whatever index the frame carries
-        fractions = pd.DataFrame(fractions.to_numpy(), index=self.adata.obs_names, columns=fractions.columns)
+        fractions = _obsm_proportions(self.adata, key)
 
         assigned = macrostates[mask]
         fractions = fractions.loc[assigned.index]
-        row_sums = fractions.to_numpy().sum(axis=1)
-        if not np.allclose(row_sums, 1.0, atol=1e-3):
-            raise ValueError(f"Expected rows of `adata.obsm[{key!r}]` to be proportions summing to `1`.")
-
-        if weight_key is None:
-            weights = np.ones(len(assigned), dtype=float)
-        else:
-            if weight_key not in self.adata.obs:
-                raise KeyError(f"Weights not found in `adata.obs[{weight_key!r}]`.")
-            weights = self.adata.obs.loc[assigned.index, weight_key].to_numpy(dtype=float)
+        _check_proportions(fractions, key)
+        weights = _obsm_proportion_weights(self.adata, weight_key, assigned.index)
 
         categories = fractions.columns
-        values = fractions.to_numpy() * weights[:, None]
-        composition = pd.DataFrame(0.0, index=categories, columns=macrostates.cat.categories)
-        for ms in macrostates.cat.categories:
-            in_state = (assigned == ms).to_numpy()
-            if in_state.any():
-                composition[ms] = values[in_state].sum(axis=0)
+        # `_aggregate_proportions` returns macrostates x categories; transpose for the stacked bars
+        composition = _aggregate_proportions(fractions, assigned, weights).T
         return composition, categories
 
     def _n_states(self, n_states: int | Sequence[int] | None) -> int:
@@ -1340,7 +1355,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
     def _compute_one_macrostate(
         self,
         n_cells: int | None,
-        cluster_key: str | None,
+        cluster_key: str | Mapping[str, str] | None,
+        weight_key: str | None = None,
     ) -> None:
         _start = _time.perf_counter()
         logger.info("For 1 macrostate, stationary distribution is computed")
@@ -1356,6 +1372,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             memberships=stationary_dist[:, None],
             n_cells=n_cells,
             cluster_key=cluster_key,
+            weight_key=weight_key,
             check_row_sums=False,
             time=_start,
         )
@@ -1365,7 +1382,8 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         self,
         memberships: np.ndarray,
         n_cells: int | None = 30,
-        cluster_key: str = "clusters",
+        cluster_key: str | Mapping[str, str] = "clusters",
+        weight_key: str | None = None,
         check_row_sums: bool = True,
         time: float | None = None,
         params: dict[str, Any] = types.MappingProxyType({}),
@@ -1381,7 +1399,10 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
             Fuzzy clustering.
         %(n_cells)s
         cluster_key
-            Key from :attr:`~anndata.AnnData.obs` to get reference cluster annotations.
+            Reference annotations to name and color the states; see :meth:`compute_macrostates`.
+        weight_key
+            Per-observation weights, only used when ``cluster_key`` points to
+            :attr:`~anndata.AnnData.obsm`; see :meth:`compute_macrostates`.
         check_row_sums
             Check whether rows in `memberships` sum to :math:`1`.
         time
@@ -1416,7 +1437,7 @@ class GPCCA(TermStatesEstimator, LinDriversMixin, SchurMixin, EigenMixin):
         self._write_states("initial", states=None, colors=None, probs=None, memberships=None, log=False)
         self._write_states("terminal", states=None, colors=None, probs=None, memberships=None, log=False)
 
-        assignment, colors = self._set_categorical_labels(assignment, cluster_key=cluster_key)
+        assignment, colors = self._set_categorical_labels(assignment, cluster_key=cluster_key, weight_key=weight_key)
         memberships = Lineage(memberships, names=list(assignment.cat.categories), colors=colors)
         # fmt: on
 

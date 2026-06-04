@@ -7,7 +7,7 @@ import os
 import time as _time
 import types
 import warnings
-from collections.abc import Callable, Hashable, Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from typing import Any, Literal, TypeVar
 
 import networkx as nx
@@ -28,6 +28,7 @@ from cellrank._utils._colors import (
     _compute_mean_color,
     _convert_to_hex_colors,
     _insert_categorical_colors,
+    _names_and_colors_from_association,
 )
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
@@ -1650,3 +1651,183 @@ def _genesymbols(wrapped: Callable[..., Any], instance: Any, args: Any, kwargs: 
         use_raw=kwargs.get("use_raw", False),
     ):
         return wrapped(*args, **kwargs)
+
+
+def _resolve_composition_key(key: str | Mapping[str, str]) -> tuple[str, str]:
+    """Resolve ``key`` to a ``(source, name)`` pair, where ``source`` is ``'obs'`` or ``'obsm'``.
+
+    Accepts a bare :class:`str` (interpreted as an :attr:`~anndata.AnnData.obs` column) or a
+    single-entry mapping ``{"obs": <column>}`` / ``{"obsm": <key>}``. Used by both
+    :meth:`~cellrank.estimators.GPCCA.plot_macrostate_composition` and macrostate naming so
+    the obs/obsm convention stays single-sourced.
+    """
+    if isinstance(key, str):
+        return "obs", key
+    if isinstance(key, Mapping):
+        if len(key) != 1:
+            raise ValueError(f"Expected `key` to have exactly one entry, found `{len(key)}`.")
+        ((source, name),) = key.items()
+        if source not in ("obs", "obsm"):
+            raise ValueError(f"Expected `key` to use `'obs'` or `'obsm'`, found `{source!r}`.")
+        return source, name
+    raise TypeError(f"Expected `key` to be a `str` or a `dict`, found `{type(key).__name__!r}`.")
+
+
+def _obsm_proportions(adata: AnnData, key: str) -> pd.DataFrame:
+    """Fetch an :attr:`~anndata.AnnData.obsm` proportion frame, aligned positionally to ``obs_names``.
+
+    The frame's own index is ignored; rows are realigned to ``adata.obs_names`` by position.
+    Row-sum validation is left to the caller, which validates only the rows it actually uses.
+    """
+    if key not in adata.obsm:
+        raise KeyError(f"Data not found in `adata.obsm[{key!r}]`.")
+    fractions = adata.obsm[key]
+    if not isinstance(fractions, pd.DataFrame):
+        raise TypeError(
+            f"Expected `adata.obsm[{key!r}]` to be a `pandas.DataFrame`, found `{type(fractions).__name__}`."
+        )
+    # align to obs_names positionally, ignoring whatever index the frame carries
+    return pd.DataFrame(fractions.to_numpy(), index=adata.obs_names, columns=fractions.columns)
+
+
+def _check_proportions(fractions: pd.DataFrame, key: str, atol: float = 1e-3) -> None:
+    """Check that the rows of a proportion frame sum to :math:`1` within ``atol``."""
+    row_sums = fractions.to_numpy().sum(axis=1)
+    if not np.allclose(row_sums, 1.0, atol=atol):
+        raise ValueError(f"Expected rows of `adata.obsm[{key!r}]` to be proportions summing to `1`.")
+
+
+def _obsm_proportion_weights(adata: AnnData, weight_key: str | None, index: pd.Index) -> np.ndarray:
+    """Resolve per-observation weights for an obsm proportion frame.
+
+    If ``weight_key`` is :obj:`None`, every observation is weighted equally (``1.0``). Otherwise
+    each observation is weighted by ``adata.obs[weight_key]`` aligned to ``index`` -- any
+    per-observation quantity, a common one being the number of cells per aggregated sample.
+    """
+    if weight_key is None:
+        return np.ones(len(index), dtype=float)
+    if weight_key not in adata.obs:
+        raise KeyError(f"Weights not found in `adata.obs[{weight_key!r}]`.")
+    return adata.obs.loc[index, weight_key].to_numpy(dtype=float)
+
+
+def _aggregate_proportions(
+    proportions: pd.DataFrame,
+    groups: pd.Series,
+    weights: np.ndarray | None = None,
+) -> pd.DataFrame:
+    """Sum the (optionally weighted) proportion rows of each group.
+
+    The reusable primitive behind both :meth:`~cellrank.estimators.GPCCA.plot_macrostate_composition`
+    and macrostate naming, so the two share identical semantics: each observation contributes its
+    proportion row to its group, scaled by its weight.
+
+    Parameters
+    ----------
+    proportions
+        Per-observation proportions, one row per observation aligned *positionally* to ``groups``.
+        Columns are the categories; rows are typically proportions summing to :math:`1`.
+    groups
+        Categorical per-observation group assignment (e.g. macrostates). Observations with a
+        :obj:`NaN` group are ignored. The result has one row per ``groups.cat.categories``.
+    weights
+        Optional per-observation weights aligned positionally to ``groups``. If :obj:`None`, every
+        observation contributes equally (weight :math:`1`); see
+        :meth:`~cellrank.estimators.GPCCA.compute_macrostates` for the weighting semantics.
+
+    Returns
+    -------
+    A :class:`~pandas.DataFrame` indexed by ``groups.cat.categories`` with one column per proportion
+    category; entry ``(g, c)`` is the (weighted) sum of column ``c`` over the observations assigned
+    to group ``g``. With unit weights and one-hot proportions this reduces to the per-group category
+    counts.
+    """
+    if not isinstance(groups.dtype, pd.CategoricalDtype):
+        raise TypeError(f"Expected `groups` to be `categorical`, found `{infer_dtype(groups)}`.")
+    if len(proportions) != len(groups):
+        raise ValueError(
+            f"Expected `proportions` and `groups` to have the same length, found `{len(proportions)}`, `{len(groups)}`."
+        )
+    if weights is None:
+        weights = np.ones(len(groups), dtype=float)
+    weights = np.asarray(weights, dtype=float)
+
+    weighted = proportions.to_numpy(dtype=float) * weights[:, None]
+    group_values = groups.to_numpy()
+    aggregated = pd.DataFrame(0.0, index=groups.cat.categories, columns=proportions.columns)
+    for group in groups.cat.categories:
+        mask = group_values == group
+        if mask.any():
+            aggregated.loc[group] = weighted[mask].sum(axis=0)
+    return aggregated
+
+
+def _map_names_and_colors_from_proportions(
+    proportions: pd.DataFrame,
+    series_query: pd.Series,
+    weights: np.ndarray | None = None,
+    colors_reference: np.ndarray | None = None,
+    en_cutoff: float | None = None,
+) -> pd.Series | tuple[pd.Series, list[Any]]:
+    """Map names and colors from per-observation proportions onto a query.
+
+    Soft-assignment analog of :func:`~cellrank._utils._colors._map_names_and_colors`: instead of
+    counting how many of each query category's observations fall into each reference category, it
+    sums the (optionally weighted) proportion rows per query category via :func:`_aggregate_proportions`
+    and delegates naming/coloring to :func:`~cellrank._utils._colors._names_and_colors_from_association`.
+    For one-hot ``proportions`` and unit ``weights`` it reduces exactly to
+    :func:`~cellrank._utils._colors._map_names_and_colors`.
+
+    Parameters
+    ----------
+    proportions
+        Per-observation proportions, aligned to ``series_query.index``. Columns are the reference
+        categories; each row sums to :math:`1`.
+    series_query
+        Series for which we would like to query the category names. Observations not assigned to any
+        query category (i.e. :obj:`NaN`) are ignored.
+    weights
+        Optional per-observation weights aligned to ``series_query``, scaling each proportion row
+        before it is summed per query category. If :obj:`None`, every observation contributes
+        equally (weight :math:`1`).
+    colors_reference
+        If given, colors for the query categories are pulled from this color array.
+    en_cutoff
+        See :func:`~cellrank._utils._colors._map_names_and_colors`.
+
+    Returns
+    -------
+    Series with updated category names and a corresponding array of colors.
+    """
+    if not isinstance(series_query.dtype, pd.CategoricalDtype):
+        raise TypeError(f"Query series must be `categorical`, found `{infer_dtype(series_query)}`.")
+    if en_cutoff is not None and en_cutoff < 0:
+        raise ValueError(f"Expected entropy cutoff to be non-negative, found `{en_cutoff}`.")
+
+    process_colors = colors_reference is not None
+
+    if not len(series_query):
+        res = pd.Series([], dtype="category")
+        return (res, []) if process_colors else res
+
+    cats_reference = proportions.columns
+    if process_colors:
+        if len(colors_reference) < len(cats_reference):
+            raise ValueError(
+                f"Length of reference colors `{len(colors_reference)}` is smaller than "
+                f"length of reference categories `{len(cats_reference)}`."
+            )
+        colors_reference = colors_reference[: len(cats_reference)]
+        if not all(colors.is_color_like(c) for c in colors_reference):
+            raise ValueError("Not all values are valid colors.")
+        if len(set(colors_reference)) != len(colors_reference):
+            logger.warning("Color sequence contains non-unique elements")
+
+    association_df = _aggregate_proportions(proportions, series_query, weights)
+
+    return _names_and_colors_from_association(
+        association_df=association_df,
+        cats_reference=cats_reference,
+        colors_reference=colors_reference if process_colors else None,
+        en_cutoff=en_cutoff,
+    )
