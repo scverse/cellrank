@@ -6,12 +6,10 @@ import scipy.sparse as sp
 
 from cellrank._utils._linear_solver import (
     _create_petsc_matrix,
-    _is_petsc_slepc_available,
     _petsc_direct_solve,
     _solve_lin_system,
 )
-
-petsc_slepc_skip = pytest.mark.skipif(not _is_petsc_slepc_available(), reason="PETSc or SLEPc is not installed.")
+from tests._helpers import petsc_slepc_skip
 
 
 def _create_a_b_matrices(seed: int, sparse: bool) -> tuple[np.ndarray, np.ndarray]:

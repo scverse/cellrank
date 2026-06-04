@@ -190,7 +190,7 @@ lint.pydocstyle.convention = "numpy"
 
 [tool.pytest]
 ini_options.testpaths = "tests"
-ini_options.addopts = [ "--import-mode=importlib" ]
+ini_options.addopts = [ "--import-mode=importlib", "--strict-markers", "--strict-config" ]
 ini_options.xfail_strict = true
 
 [tool.coverage]
