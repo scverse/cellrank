@@ -362,9 +362,8 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
                 f"`adata.X` or `adata.obs`."
             )
 
-        probs = Lineage.from_adata(self.adata, backward=backward)
         if lineage is not None:
-            probs = probs[lineage]
+            probs = Lineage.from_adata(self.adata, backward=backward)[lineage]
 
         if time_key not in self.adata.obs:
             raise KeyError(f"Time key `{time_key!r}` not found in `adata.obs`.")

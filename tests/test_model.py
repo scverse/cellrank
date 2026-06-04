@@ -107,6 +107,15 @@ class TestModel:
         xtest, xall = model.x_test, model.x_all
         np.testing.assert_allclose(np.r_[xtest[0], xtest[-1]], np.r_[np.min(xall), np.max(xall)])
 
+    def test_prepare_no_lineage(self, adata_cflare):
+        # no lineages computed, `lineage=None` should set all weights to 1 (see #1152)
+        del adata_cflare.obsm[Key.obsm.fate_probs(False)]
+        model = create_model(adata_cflare)
+        model = model.prepare(adata_cflare.var_names[0], None, "latent_time")
+
+        np.testing.assert_array_equal(model.w_all, 1.0)
+        assert model._lineage is None
+
     def test_prepare_resets_fields(self, adata_cflare: AnnData):
         g = GAM(adata_cflare)
 
