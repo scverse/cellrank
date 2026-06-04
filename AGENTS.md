@@ -26,6 +26,7 @@ Every fact should have one owner. This file owns invariants and the reference ta
 | Release notes | `docs/release_notes.md` |
 | PR review workflow and risk areas | `REVIEW_GUIDE.md` |
 | Test fixtures | `tests/conftest.py` |
+| CI jobs: test matrix + which extras run where | `.github/workflows/test.yaml` |
 
 ## Module Map
 
@@ -80,4 +81,4 @@ uv run pytest tests/test_kernels.py -v
 uv run pytest tests/test_gpcca.py -v
 ```
 
-PETSc/SLEPc tests are skipped unless the `petsc` extra is installed (requires a working MPI + PETSc/SLEPc build); some R-backed model tests are skipped unless `rpy2` + R's `mgcv` are available. These skips are expected.
+PETSc/SLEPc tests are skipped unless the `petsc` extra is installed (requires a working MPI + PETSc/SLEPc build); some R-backed model tests are skipped unless `rpy2` + R's `mgcv` are available. These skips are expected **locally**, but they are **not** a CI coverage gap: alongside the main `hatch-test` matrix (which skips them), a dedicated `PETSc / SLEPc + R` job in `.github/workflows/test.yaml` installs these stacks and runs the otherwise-skipped tests. Before assuming a skip means "untested in CI", check what that workflow actually installs — the `test` dependency group in `pyproject.toml` is only part of the picture.
