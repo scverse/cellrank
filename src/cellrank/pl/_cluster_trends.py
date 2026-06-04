@@ -170,7 +170,7 @@ def cluster_trends(
             for i, colors in enumerate(covariate_colors):
                 ax_clusters = fig.add_subplot(gss[i + 1, 0])
                 if is_color_like(colors[0]):  # e.g. categorical
-                    cm = ListedColormap(colors, N=len(colors))
+                    cm = ListedColormap(list(colors))
                     ax_clusters.imshow(np.arange(cm.N)[None, :], cmap=cm, aspect="auto")
                 else:
                     cm = plt.get_cmap(cmap)
