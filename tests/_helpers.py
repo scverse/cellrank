@@ -214,7 +214,7 @@ def assert_models_equal(
                 assert_array_nan_equal(val2.X, val1.X)
             else:
                 assert val2 is val1, (val2, val1, attr)
-        elif isinstance(val1, (np.ndarray, pd.Series, pd.DataFrame)):
+        elif isinstance(val1, (np.ndarray, pd.Series, pd.DataFrame, pd.api.extensions.ExtensionArray)):
             if deepcopy or pickled:
                 try:
                     assert val2 is not val1, attr
