@@ -3336,6 +3336,88 @@ class TestMacrostateComposition:
     def test_msc_legend_loc(self, mc: GPCCA, fpath: str):
         mc.plot_macrostate_composition("clusters_enlarged", dpi=DPI, save=fpath, legend_loc="upper left out")
 
+    @compare(kind="gpcca")
+    def test_msc_obsm(self, mc: GPCCA, fpath: str):
+        # per-observation proportions (rows sum to 1); reuse `clusters` categories/colors
+        mc.adata.obsm["clusters"] = pd.get_dummies(mc.adata.obs["clusters"]).astype(float)
+        mc.plot_macrostate_composition({"obsm": "clusters"}, dpi=DPI, save=fpath)
+
+    @compare(kind="gpcca")
+    def test_msc_obsm_weighted(self, mc: GPCCA, fpath: str):
+        mc.adata.obsm["clusters"] = pd.get_dummies(mc.adata.obs["clusters"]).astype(float)
+        mc.adata.obs["n_cells"] = np.arange(1, mc.adata.n_obs + 1, dtype=float)
+        mc.plot_macrostate_composition({"obsm": "clusters"}, weight_key="n_cells", dpi=DPI, save=fpath)
+
+    @compare(kind="gpcca")
+    def test_msc_obs_dict(self, mc: GPCCA, fpath: str):
+        # explicit `{"obs": ...}` is equivalent to passing the bare string
+        mc.plot_macrostate_composition({"obs": "clusters"}, dpi=DPI, save=fpath)
+
+    @staticmethod
+    def _bar_totals(ax) -> np.ndarray:
+        # sum stacked-bar heights per x position (one per macrostate)
+        by_x: dict[float, float] = {}
+        for patch in ax.patches:
+            x = round(patch.get_x(), 3)
+            by_x[x] = by_x.get(x, 0.0) + patch.get_height()
+        return np.array([by_x[x] for x in sorted(by_x)])
+
+    def test_msc_obsm_reproduces_obs_counts(self, g: GPCCA):
+        # one-hot proportions summed per macrostate == categorical cell counts
+        g.adata.obsm["clusters"] = pd.get_dummies(g.adata.obs["clusters"]).astype(float)
+        expected = (
+            g.macrostates.value_counts().reindex(g.macrostates.cat.categories, fill_value=0).to_numpy(dtype=float)
+        )
+
+        ax_obs = g.plot_macrostate_composition("clusters", show=False)
+        ax_obsm = g.plot_macrostate_composition({"obsm": "clusters"}, show=False)
+        np.testing.assert_allclose(self._bar_totals(ax_obs), expected)
+        np.testing.assert_allclose(self._bar_totals(ax_obsm), expected)
+        plt.close("all")
+
+    def test_msc_obsm_weighted_sums_weights(self, g: GPCCA):
+        # weighted bar height per macrostate == total weight of its observations
+        g.adata.obsm["clusters"] = pd.get_dummies(g.adata.obs["clusters"]).astype(float)
+        g.adata.obs["n_cells"] = np.arange(1, g.adata.n_obs + 1, dtype=float)
+        assigned = g.macrostates[~g.macrostates.isnull()]
+        expected = (
+            g.adata.obs.loc[assigned.index, "n_cells"]
+            .groupby(assigned, observed=False)
+            .sum()
+            .reindex(g.macrostates.cat.categories, fill_value=0)
+            .to_numpy(dtype=float)
+        )
+
+        ax = g.plot_macrostate_composition({"obsm": "clusters"}, weight_key="n_cells", show=False)
+        np.testing.assert_allclose(self._bar_totals(ax), expected)
+        plt.close("all")
+
+    def test_msc_invalid_key_type(self, g: GPCCA):
+        with pytest.raises(TypeError, match=r"Expected `key`"):
+            g.plot_macrostate_composition(["clusters"], show=False)
+
+    def test_msc_invalid_key_source(self, g: GPCCA):
+        with pytest.raises(ValueError, match=r"obs.*obsm"):
+            g.plot_macrostate_composition({"varm": "clusters"}, show=False)
+
+    def test_msc_obsm_missing(self, g: GPCCA):
+        with pytest.raises(KeyError, match=r"adata.obsm"):
+            g.plot_macrostate_composition({"obsm": "does_not_exist"}, show=False)
+
+    def test_msc_obsm_not_dataframe(self, g: GPCCA):
+        g.adata.obsm["arr"] = np.ones((g.adata.n_obs, 3))
+        with pytest.raises(TypeError, match=r"pandas.DataFrame"):
+            g.plot_macrostate_composition({"obsm": "arr"}, show=False)
+
+    def test_msc_obsm_not_proportions(self, g: GPCCA):
+        g.adata.obsm["bad"] = pd.DataFrame(np.ones((g.adata.n_obs, 3)), index=g.adata.obs_names, columns=list("abc"))
+        with pytest.raises(ValueError, match=r"proportions"):
+            g.plot_macrostate_composition({"obsm": "bad"}, show=False)
+
+    def test_msc_weight_key_with_obs(self, g: GPCCA):
+        with pytest.raises(ValueError, match=r"`weight_key`"):
+            g.plot_macrostate_composition("clusters", weight_key="foo", show=False)
+
 
 @scvelo_skip
 class TestProjectionEmbedding:

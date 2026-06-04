@@ -167,7 +167,9 @@ class CytoTRACEKernel(PseudotimeKernel):
         if layer not in (None, "X") and layer not in self.adata.layers:
             raise KeyError(
                 f"Unable to find `{layer!r}` in `adata.layers`. "
-                f"Valid option are: `{sorted({'X'} | set(self.adata.layers.keys()))}`."
+                # anndata >=0.13 includes ``None`` in ``layers.keys()`` (it aliases ``.X``);
+                # drop it so the set of string options stays sortable.
+                f"Valid option are: `{sorted({'X'} | (set(self.adata.layers.keys()) - {None}))}`."
             )
 
         adata_mraw = self.adata.raw if use_raw else self.adata
