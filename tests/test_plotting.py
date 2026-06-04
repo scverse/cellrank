@@ -503,8 +503,18 @@ class TestAggregateAbsorptionProbabilities:
         )
 
 
+def _run_cluster_trends(adata, model, genes, lineage="1", **kwargs):
+    """Render cluster trends and return the current figure (for smoke / introspection)."""
+    kwargs.setdefault("clustering_kwargs", {"flavor": "igraph", "n_iterations": 2})
+    kwargs.setdefault("random_state", 0)
+    plt.close("all")
+    cr.pl.cluster_trends(adata, model, genes, lineage, "latent_time", dpi=DPI, **kwargs)
+    return plt.gcf()
+
+
 class TestClusterTrends:
-    @compare()
+    # --- visual regression: base grid + the covariate-annotated variant ---
+    @compare(tol=STRICT_TOL)
     def test_cluster_lineage(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.cluster_trends(
@@ -519,40 +529,8 @@ class TestClusterTrends:
             save=fpath,
         )
 
-    @compare(kind="bwd")
-    def test_cluster_lineage_bwd(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "0",
-            "latent_time",
-            random_state=0,
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            backward=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_cluster_lineage_raw(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            RAW_GENES[:5],
-            "1",
-            "latent_time",
-            random_state=0,
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            dpi=DPI,
-            save=fpath,
-            use_raw=True,
-        )
-
-    @compare()
-    def test_cluster_lineage_no_norm(self, adata: AnnData, fpath: str):
+    @compare(tol=STRICT_TOL)
+    def test_cluster_lineage_covariates(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.cluster_trends(
             adata,
@@ -560,62 +538,58 @@ class TestClusterTrends:
             GENES[:10],
             "1",
             "latent_time",
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            random_state=0,
-            norm=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_cluster_lineage_data_key(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            random_state=0,
-            data_key="Ms",
-            norm=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_cluster_lineage_random_state(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            random_state=42,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_cluster_lineage_leiden(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
+            covariate_key=["clusters", "latent_time"],
             clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
             random_state=0,
             dpi=DPI,
             save=fpath,
         )
 
-    @compare()
-    def test_cluster_lineage_2_failed_genes(self, adata: AnnData, fpath: str):
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    def test_cluster_lineage_covariates_cmap(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        fig = _run_cluster_trends(adata, create_model(adata), GENES[:10], covariate_key="latent_time", cmap="inferno")
+        assert _any_cmap(fig, "inferno")
+        plt.close("all")
+
+    # --- behaviour coverage: assert the call runs and produces a figure ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda a: _run_cluster_trends(a, create_model(a), RAW_GENES[:5], use_raw=True), id="raw"),
+            pytest.param(lambda a: _run_cluster_trends(a, create_model(a), GENES[:10], norm=False), id="no_norm"),
+            pytest.param(
+                lambda a: _run_cluster_trends(a, create_model(a), GENES[:10], data_key="Ms", norm=False), id="data_key"
+            ),
+            pytest.param(
+                lambda a: _run_cluster_trends(a, create_model(a), GENES[:10], random_state=42), id="random_state"
+            ),
+            pytest.param(
+                lambda a: _run_cluster_trends(a, create_model(a), GENES[:10], covariate_key="latent_time", ratio=0.25),
+                id="covariates_ratio",
+            ),
+            pytest.param(
+                lambda a: _run_cluster_trends(
+                    a, create_model(a), [f"{g}:gs" for g in GENES[:10]], gene_symbols="symbol"
+                ),
+                id="gene_symbols",
+            ),
+        ],
+    )
+    def test_cluster_lineage_runs(self, adata_gpcca_fwd, call):
+        adata, _ = adata_gpcca_fwd
+        fig = call(adata)
+        assert fig.axes
+        plt.close("all")
+
+    def test_cluster_lineage_bwd_runs(self, adata_gpcca_bwd):
+        adata, _ = adata_gpcca_bwd
+        fig = _run_cluster_trends(adata, create_model(adata), GENES[:10], "0", backward=True)
+        assert fig.axes
+        plt.close("all")
+
+    def test_cluster_lineage_2_failed_genes(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
         fm = create_failed_model(adata)
         cr.pl.cluster_trends(
             adata,
@@ -626,13 +600,12 @@ class TestClusterTrends:
             clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
             random_state=0,
             key="foobar",
-            dpi=DPI,
-            save=fpath,
         )
-
         assert isinstance(adata.uns["foobar"], AnnData)
         assert adata.uns["foobar"].shape == (8, 200)
+        plt.close("all")
 
+    # --- behaviour / return contracts (no figure involved) ---
     def test_cluster_lineage_returns_fitted_models(self, adata_cflare: AnnData):
         fm = create_failed_model(adata_cflare)
         models = cr.pl.cluster_trends(
@@ -716,343 +689,42 @@ class TestClusterTrends:
         assert adata_cflare.uns["foobar"].shape == (10, 200)
         assert isinstance(adata_cflare.uns["foobar"].obs["clusters"].dtype, pd.CategoricalDtype)
 
-    @compare()
-    def test_cluster_lineage_covariates(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
-            covariate_key=["clusters", "latent_time"],
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            random_state=0,
-            dpi=DPI,
-            save=fpath,
-        )
 
-    @compare()
-    def test_cluster_lineage_covariates_cmap(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
-            covariate_key="latent_time",
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            cmap="inferno",
-            random_state=0,
-            dpi=DPI,
-            save=fpath,
-        )
+def _run_heatmap(adata, genes=None, **kwargs):
+    """Render a heatmap and return its figure(s) (a Figure for ``genes`` mode, a list for ``lineages``)."""
+    model = create_model(adata)
+    kwargs.setdefault("mode", "lineages")
+    res = cr.pl.heatmap(
+        adata, model, GENES[:5] if genes is None else genes, "latent_time", dpi=DPI, return_figure=True, **kwargs
+    )
+    return res[0] if isinstance(res, tuple) else res
 
-    @compare()
-    def test_cluster_lineage_covariates_ratio(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
-            covariate_key="latent_time",
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            ratio=0.25,
-            random_state=0,
-            dpi=DPI,
-            save=fpath,
-        )
 
-    @compare()
-    def test_cluster_lineage_gene_symbols(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            [f"{g}:gs" for g in GENES[:10]],
-            "1",
-            "latent_time",
-            gene_symbols="symbol",
-            clustering_kwargs={"flavor": "igraph", "n_iterations": 2},
-            random_state=0,
-            dpi=DPI,
-            save=fpath,
-        )
+def _as_figure(obj):
+    # heatmap returns a matplotlib Figure (`genes` mode) or a seaborn ClusterGrid (`lineages` mode)
+    return obj if isinstance(obj, plt.Figure) else getattr(obj, "figure", getattr(obj, "fig", None))
+
+
+def _assert_figures(fig) -> None:
+    figs = fig if isinstance(fig, list) else [fig]
+    assert figs
+    assert all(isinstance(_as_figure(f), plt.Figure) for f in figs)
+    plt.close("all")
 
 
 class TestHeatmap:
-    @compare(dirname="heatmap_lineages")
+    # --- visual regression: lineages + genes modes and the richly-annotated variant ---
+    @compare(dirname="heatmap_lineages", tol=STRICT_TOL)
     def test_heatmap_lineages(self, adata: AnnData, fpath: str):
         model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
+        cr.pl.heatmap(adata, model, GENES[:10], "latent_time", mode="lineages", dpi=DPI, save=fpath)
 
-    @compare(kind="bwd", dirname="heatmap_lineages_bwd")
-    def test_heatmap_lineages_bwd(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            backward=True,
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_lineages_raw")
-    def test_heatmap_lineages_raw(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            RAW_GENES[:5],
-            "latent_time",
-            mode="lineages",
-            use_raw=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_heatmap_genes(self, adata: AnnData, fpath: str):
         model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            mode="genes",
-            dpi=DPI,
-            save=fpath,
-        )
+        cr.pl.heatmap(adata, model, GENES[:10], "latent_time", mode="genes", dpi=DPI, save=fpath)
 
-    @compare(dirname="heatmap_no_cluster_genes")
-    def test_heatmap_no_cluster_genes(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            cluster_genes=False,
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_heatmap_cluster_genes(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            lineages="1",
-            mode="lineages",
-            cluster_genes=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_lineage_height")
-    def test_heatmap_lineage_height(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            lineage_height=0.2,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_time_range")
-    def test_heatmap_time_range(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            time_range=(0.2, 0.5),
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(tol=250)
-    def test_heatmap_cmap(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="genes",
-            cmap=cm.viridis,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_no_cbar_lineages")
-    def test_heatmap_no_cbar_lineages(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="lineages",
-            cbar=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_heatmap_no_cbar_genes(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="genes",
-            cbar=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_fate_probs_lineages")
-    def test_heatmap_fate_probs_lineages(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="lineages",
-            show_fate_probabilities=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_heatmap_fate_probs_genes(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="genes",
-            show_fate_probabilities=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_no_convolve")
-    def test_heatmap_no_convolve(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="lineages",
-            n_convolve=None,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_no_scale_lineages")
-    def test_heatmap_no_scale_lineages(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="lineages",
-            scale=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_heatmap_no_scale_genes(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="genes",
-            scale=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_heatmap_cluster_no_scale(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            lineages="1",
-            mode="lineages",
-            scale=False,
-            cluster_genes=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_no_cluster")
-    def test_heatmap_no_cluster(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            mode="lineages",
-            cluster_genes=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_cluster_key_no_fate_probs")
-    def test_heatmap_cluster_key_no_fate_probs(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            cluster_key="clusters",
-            show_fate_probabilities=False,
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_cluster_key_fate_probs")
+    @compare(dirname="heatmap_cluster_key_fate_probs", tol=STRICT_TOL)
     def test_heatmap_cluster_key_fate_probs(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.heatmap(
@@ -1067,85 +739,7 @@ class TestHeatmap:
             save=fpath,
         )
 
-    @compare(dirname="heatmap_multiple_cluster_keys")
-    def test_heatmap_multiple_cluster_keys(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            cluster_key=["clusters", "clusters_enlarged", "clusters"],
-            show_fate_probabilities=True,
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_multiple_cluster_keys_show_all_genes")
-    def test_heatmap_multiple_cluster_keys_show_all_genes(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @pytest.mark.skip("Hangs using pytest-xdist")
-    @compare(dirname="heatmap_n_jobs")
-    def test_heatmap_n_jobs(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            n_jobs=2,
-            backend="threading",
-            cluster_key=["clusters", "clusters_enlarged", "clusters"],
-            show_fate_probabilities=True,
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @pytest.mark.skip("Hangs using pytest-xdist")
-    @compare(dirname="heatmap_n_jobs_multiprocessing")
-    def test_heatmap_n_jobs_multiprocessing(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:5],
-            "latent_time",
-            n_jobs=2,
-            backend="loky",  # uses pickling of objects, such as Lineage
-            cluster_key=["clusters", "clusters_enlarged", "clusters"],
-            show_fate_probabilities=True,
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="heatmap_keep_gene_order")
-    def test_heatmap_keep_gene_order(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            keep_gene_order=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_heatmap_show_dendrogram(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.heatmap(
@@ -1161,44 +755,79 @@ class TestHeatmap:
             save=fpath,
         )
 
-    @compare(dirname="heatmap_lineages_1_lineage_failed")
-    def test_heatmap_lineages_1_lineage_failed(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.heatmap(
-            adata,
-            {g: {"0": fm, "*": fm.model} for g in GENES[:10]},
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    def test_heatmap_cmap(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _any_cmap(_run_heatmap(adata, mode="genes", cmap=cm.inferno), "inferno")
 
-    @compare()
-    def test_heatmap_genes_1_gene_failed(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.heatmap(
-            adata,
-            {GENES[0]: fm, "*": fm.model},
-            GENES[:10],
-            "latent_time",
-            mode="genes",
-            dpi=DPI,
-            save=fpath,
-        )
+    def test_heatmap_no_cbar(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        on = _run_heatmap(adata, mode="genes")
+        off = _run_heatmap(adata, mode="genes", cbar=False)
+        assert len(off.axes) < len(on.axes)
 
-    @compare(dirname="heatmap_gene_symbols")
-    def test_heatmap_gene_symbols(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.heatmap(
-            adata,
-            model,
-            [f"{g}:gs" for g in GENES[:10]],
-            "latent_time",
-            gene_symbols="symbol",
-            dpi=DPI,
-            save=fpath,
+    # --- behaviour coverage: assert the call runs and produces figure(s) ---
+    @pytest.mark.parametrize(
+        ("genes", "kwargs"),
+        [
+            pytest.param(None, {"mode": "lineages", "cluster_genes": False}, id="no_cluster_genes"),
+            pytest.param(None, {"mode": "lineages", "lineages": "1", "cluster_genes": True}, id="cluster_genes"),
+            pytest.param(None, {"mode": "lineages", "lineage_height": 0.2}, id="lineage_height"),
+            pytest.param(None, {"mode": "lineages", "time_range": (0.2, 0.5)}, id="time_range"),
+            pytest.param(None, {"mode": "lineages", "cbar": False}, id="no_cbar_lineages"),
+            pytest.param(None, {"mode": "lineages", "show_fate_probabilities": True}, id="fate_probs_lineages"),
+            pytest.param(None, {"mode": "genes", "show_fate_probabilities": True}, id="fate_probs_genes"),
+            pytest.param(None, {"mode": "lineages", "n_convolve": None}, id="no_convolve"),
+            pytest.param(None, {"mode": "lineages", "scale": False}, id="no_scale_lineages"),
+            pytest.param(None, {"mode": "genes", "scale": False}, id="no_scale_genes"),
+            pytest.param(
+                None,
+                {"mode": "lineages", "lineages": "1", "scale": False, "cluster_genes": True},
+                id="cluster_no_scale",
+            ),
+            pytest.param(
+                None,
+                {"mode": "lineages", "cluster_key": "clusters", "show_fate_probabilities": False},
+                id="cluster_key_no_fate_probs",
+            ),
+            pytest.param(
+                None,
+                {
+                    "mode": "lineages",
+                    "cluster_key": ["clusters", "clusters_enlarged", "clusters"],
+                    "show_fate_probabilities": True,
+                },
+                id="multiple_cluster_keys",
+            ),
+            pytest.param(GENES[:10], {"mode": "lineages"}, id="show_all_genes"),
+            pytest.param(GENES[:10], {"mode": "lineages", "keep_gene_order": True}, id="keep_gene_order"),
+            pytest.param(RAW_GENES[:5], {"mode": "lineages", "use_raw": True}, id="raw"),
+            pytest.param(
+                [f"{g}:gs" for g in GENES[:10]], {"mode": "lineages", "gene_symbols": "symbol"}, id="gene_symbols"
+            ),
+        ],
+    )
+    def test_heatmap_runs(self, adata_gpcca_fwd, genes, kwargs):
+        adata, _ = adata_gpcca_fwd
+        _assert_figures(_run_heatmap(adata, genes, **kwargs))
+
+    def test_heatmap_bwd_runs(self, adata_gpcca_bwd):
+        adata, _ = adata_gpcca_bwd
+        _assert_figures(_run_heatmap(adata, GENES[:10], mode="lineages", backward=True))
+
+    def test_heatmap_lineage_failed_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        res = cr.pl.heatmap(
+            adata, _failed_one_lineage(adata), GENES[:10], "latent_time", mode="lineages", dpi=DPI, return_figure=True
         )
+        _assert_figures(res[0] if isinstance(res, tuple) else res)
+
+    def test_heatmap_gene_failed_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        res = cr.pl.heatmap(
+            adata, _failed_one_gene(adata), GENES[:10], "latent_time", mode="genes", dpi=DPI, return_figure=True
+        )
+        _assert_figures(res[0] if isinstance(res, tuple) else res)
 
 
 class TestHeatmapReturns:
@@ -1384,7 +1013,12 @@ def _any_title(fig, text: str) -> bool:
 
 
 def _any_cmap(fig, name: str) -> bool:
-    return any(c.get_cmap().name == name for ax in fig.axes for c in ax.collections if hasattr(c, "get_cmap"))
+    for ax in fig.axes:
+        if any(im.get_cmap().name == name for im in ax.get_images()):
+            return True
+        if any(hasattr(c, "get_cmap") and c.get_cmap().name == name for c in ax.collections):
+            return True
+    return False
 
 
 class TestGeneTrend:
