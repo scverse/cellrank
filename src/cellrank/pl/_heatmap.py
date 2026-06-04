@@ -17,7 +17,7 @@ from matplotlib import cm, colors
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1 import Divider, Size
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy.ndimage.filters import convolve
+from scipy.ndimage import convolve
 
 from cellrank._utils import Lineage
 from cellrank._utils._docs import d, inject_docs
