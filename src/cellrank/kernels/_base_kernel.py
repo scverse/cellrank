@@ -284,7 +284,15 @@ class KernelExpression(IOMixin, abc.ABC):
         connectivities
             Connectivity matrix to use for projection. If :obj:`None`, use ones from the underlying kernel, is possible.
         kwargs
-            Keyword argument for the above-mentioned plotting function.
+            Keyword argument for the above-mentioned plotting function. To save the figure, either pass
+            ``save='<name>.pdf'`` (forwarded to :mod:`scvelo`, which writes to its
+            :attr:`~scvelo.settings.figdir` directory, by default ``'./figures/'``), or pass ``show=False`` and use
+            :func:`~matplotlib.pyplot.savefig`::
+
+                import matplotlib.pyplot as plt
+
+                kernel.plot_projection(basis="umap", show=False)
+                plt.savefig("projection.pdf", bbox_inches="tight")
 
         Returns
         -------
