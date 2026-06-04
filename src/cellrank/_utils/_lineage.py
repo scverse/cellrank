@@ -167,7 +167,9 @@ def _register_handled_functions():
     # adapted from:
     # https://github.com/numpy/numpy/blob/v1.26.0/numpy/testing/overrides.py#L50
     try:
-        from numpy.core.overrides import ARRAY_FUNCTIONS
+        from numpy.testing.overrides import get_overridable_numpy_array_functions
+
+        ARRAY_FUNCTIONS = get_overridable_numpy_array_functions()
     except ImportError:
         ARRAY_FUNCTIONS = [getattr(np, attr) for attr in dir(np)]
 

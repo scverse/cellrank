@@ -182,6 +182,7 @@ class RealTimeKernel(UnidirectionalKernel):
         cache_params = dict(kwargs)
         cache_params["threshold"] = threshold
         cache_params["self_transitions"] = str(self_transitions)
+        cache_params["conn_weight"] = conn_weight
         if self._reuse_cache(cache_params):
             return self
 
