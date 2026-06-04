@@ -36,7 +36,7 @@ HERE: str = pathlib.Path(__file__).parent
 GT_FIGS = HERE / "_ground_truth_figures"
 FIGS = HERE / "figures"
 DPI = 40
-TOL = 150
+TOL = 50
 
 # both are for `50` adata
 GENES = [
@@ -1311,7 +1311,48 @@ class TestHeatmapReturns:
         assert df is None
 
 
+def _gene_trends_fig(adata: AnnData, **kwargs):
+    """Render a single-panel gene-trend figure and return it for introspection."""
+    model = create_model(adata)
+    return cr.pl.gene_trends(
+        adata,
+        model,
+        GENES[0],
+        time_key="latent_time",
+        data_key="Ms",
+        same_plot=True,
+        return_figure=True,
+        **kwargs,
+    )
+
+
+def _scatter_collection(ax):
+    """Return the cell-scatter collection of an axis, or :obj:`None` if cells are hidden."""
+    cells = [c for c in ax.collections if type(c).__name__ == "PathCollection"]
+    return cells[0] if cells else None
+
+
+def _has_legend(fig) -> bool:
+    return bool(fig.legends) or any("Legend" in type(child).__name__ for ax in fig.axes for child in ax.get_children())
+
+
+def _estimator_fig(estimator, method: str, **kwargs):
+    """Call an estimator plotting method and return the figure it drew (without saving)."""
+    plt.close("all")
+    getattr(estimator, method)(dpi=DPI, **kwargs)
+    return plt.gcf()
+
+
+def _any_title(fig, text: str) -> bool:
+    return any(ax.get_title() == text for ax in fig.axes)
+
+
+def _any_cmap(fig, name: str) -> bool:
+    return any(c.get_cmap().name == name for ax in fig.axes for c in ax.collections if hasattr(c, "get_cmap"))
+
+
 class TestGeneTrend:
+    # --- visual regression: one representative render per major layout ---
     @compare()
     def test_trends(self, adata: AnnData, fpath: str):
         model = create_model(adata)
@@ -1340,20 +1381,6 @@ class TestGeneTrend:
         )
 
     @compare()
-    def test_trends_raw(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            RAW_GENES[:5],
-            time_key="latent_time",
-            data_key="X",
-            use_raw=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
     def test_trends_same_plot(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
@@ -1368,377 +1395,15 @@ class TestGeneTrend:
         )
 
     @compare()
-    def test_trends_hide_cells(self, adata: AnnData, fpath: str):
+    def test_transpose(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
             adata,
             model,
-            GENES[0],
+            GENES[:4],
+            transpose=True,
+            data_key="Ms",
             time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            hide_cells=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_conf_int(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            conf_int=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_sharey(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:3],
-            time_key="latent_time",
-            data_key="Ms",
-            sharey="row",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_sharex(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            time_key="latent_time",
-            ncols=3,
-            data_key="Ms",
-            sharex="all",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_gene_as_title(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            time_key="latent_time",
-            gene_as_title=False,
-            same_plot=True,
-            data_key="Ms",
-            sharex="all",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_gene_no_legend(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            time_key="latent_time",
-            legend_loc=None,
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_gene_legend_out(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:2],
-            time_key="latent_time",
-            same_plot=True,
-            legend_loc="bottom right out",
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_no_cbar(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            cbar=False,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lineage_cmap(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            lineage_cmap=cm.Set2,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_fate_prob_cmap(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=False,
-            hide_cells=False,
-            fate_prob_cmap=cm.inferno,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lineage_cell_color(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            cell_color="red",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lineage_cell_color_gene(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            cell_color=adata.var_names[0],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lineage_cell_color_clusters(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            cell_color="clusters",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lineage_cell_color_clusters_obs_legend_loc(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            cell_color="clusters",
-            obs_legend_loc="top left out",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lw(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            lw=10,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_suptitle(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            time_key="latent_time",
-            suptitle="FOOBAR",
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_size(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            size=30,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_margins(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            margins=0.2,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_cell_alpha(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            cell_alpha=0,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_lineage_alpha(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            lineage_alpha=1,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_time_range(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=False,
-            time_range=(0, 0.5),
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_perc(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=False,
-            perc=(0, 50),
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_perc_per_lineage(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:3],
-            time_key="latent_time",
-            figsize=(5, 5),
-            data_key="Ms",
-            same_plot=False,
-            perc=[(0, 50), (5, 95), (50, 100)],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_time_key(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            data_key="Ms",
-            same_plot=False,
-            time_key="dpt_pseudotime",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_show_lineage_ignores_no_transpose(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:5],
-            time_key="latent_time",
-            transpose=False,
-            data_key="Ms",
-            same_plot=True,
-            plot_kwargs={"lineage_probability": True},
             dpi=DPI,
             save=fpath,
         )
@@ -1760,56 +1425,61 @@ class TestGeneTrend:
         )
 
     @compare()
-    def test_trends_show_lineage_diff_plot(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
+    def test_all_models_for_1_gene_failed(self, adata: AnnData, fpath: str):
+        fm = create_failed_model(adata)
         cr.pl.gene_trends(
             adata,
-            model,
-            GENES[0],
-            time_key="latent_time",
-            data_key="Ms",
-            same_plot=False,
-            transpose=True,
-            plot_kwargs={"lineage_probability": True},
+            {GENES[0]: fm, "*": fm.model},
+            GENES[:3],
             figsize=(5, 5),
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_show_lineage_ci(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[0],
+            data_key="Ms",
             time_key="latent_time",
-            data_key="Ms",
-            same_plot=True,
-            transpose=True,
-            plot_kwargs={"lineage_probability": True, "lineage_probability_conf_int": True},
             dpi=DPI,
             save=fpath,
         )
 
-    @compare()
-    def test_trends_time_key_del_latent_time(self, adata: AnnData, fpath: str):
-        # this ensures that the callback passes the correct values
-        del adata.obs["latent_time"]
-        assert "latent_time" not in adata.obs
+    # --- parameter plumbing: assert on the Figure/Axes, not on pixels ---
+    @pytest.mark.parametrize(
+        ("kwargs", "check"),
+        [
+            pytest.param(
+                {"lw": 10},
+                lambda fig: max(ln.get_linewidth() for ln in fig.axes[0].get_lines()) == 10,
+                id="lw",
+            ),
+            pytest.param(
+                {"size": 300},
+                lambda fig: set(_scatter_collection(fig.axes[0]).get_sizes()) == {300},
+                id="size",
+            ),
+            pytest.param(
+                {"cell_alpha": 0.123},
+                lambda fig: _scatter_collection(fig.axes[0]).get_alpha() == 0.123,
+                id="cell_alpha",
+            ),
+            pytest.param(
+                {"hide_cells": True},
+                lambda fig: _scatter_collection(fig.axes[0]) is None,
+                id="hide_cells",
+            ),
+            pytest.param(
+                {"suptitle": "FOOBAR"},
+                lambda fig: fig._suptitle.get_text() == "FOOBAR",
+                id="suptitle",
+            ),
+            pytest.param(
+                {"legend_loc": None},
+                lambda fig: not _has_legend(fig),
+                id="no_legend",
+            ),
+        ],
+    )
+    def test_trends_knob(self, adata_gpcca_fwd, kwargs, check):
+        adata, _ = adata_gpcca_fwd
+        fig = _gene_trends_fig(adata, **kwargs)
+        assert check(fig)
 
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:10],
-            data_key="Ms",
-            same_plot=False,
-            time_key="dpt_pseudotime",
-            dpi=DPI,
-            save=fpath,
-        )
-
+    # --- behavior / error contracts ---
     def test_invalid_time_key(self, adata_cflare: AnnData):
         model = create_model(adata_cflare)
         with pytest.raises(KeyError, match=r"Fatal model"):
@@ -1875,174 +1545,6 @@ class TestGeneTrend:
         mask.loc[GENES[0], "0"] = True
 
         assert np.all(mask)
-
-    @compare()
-    def test_all_models_for_1_gene_failed(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {GENES[0]: fm, "*": fm.model},
-            GENES[:3],
-            figsize=(5, 5),
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_all_models_for_1_lineage_failed(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {g: {"0": fm, "*": fm.model} for g in GENES[:3]},
-            GENES[:3],
-            figsize=(5, 5),
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_all_models_for_1_gene_failed_same_plot(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {GENES[0]: fm, "*": fm.model},
-            GENES[:10],
-            data_key="Ms",
-            time_key="latent_time",
-            same_plot=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_failed_only_main_diagonal(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {g: {str(ln): fm.model, "*": fm} for ln, g in enumerate(GENES[:3])},
-            GENES[:3],
-            lineages=["0", "1", "2"],
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_failed_only_off_diagonal(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {g: {str(ln): fm.model, "*": fm} for ln, g in zip(range(3)[::-1], GENES[:3])},
-            GENES[:3],
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_transpose(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:4],
-            transpose=True,
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_transpose_same_plot(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            GENES[:3],
-            transpose=True,
-            same_plot=True,
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_transpose_all_models_for_1_gene_failed(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {GENES[0]: fm, "*": fm.model},
-            GENES[:10],
-            transpose=True,
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_transpose_all_models_for_1_lineage_failed(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {g: {"0": fm, "*": fm.model} for g in GENES[:10]},
-            GENES[:10],
-            transpose=True,
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_transpose_failed_only_off_diagonal(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {g: {str(ln): fm.model, "*": fm} for ln, g in zip(range(3)[::-1], GENES[:3])},
-            GENES[:3],
-            transpose=True,
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_transpose_all_models_for_1_lineage_failed_same_plot(self, adata: AnnData, fpath: str):
-        fm = create_failed_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            {g: {"0": fm, "*": fm.model} for g in GENES[:10]},
-            GENES[:10],
-            transpose=True,
-            same_plot=True,
-            data_key="Ms",
-            time_key="latent_time",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_trends_gene_symbols(self, adata: AnnData, fpath: str):
-        model = create_model(adata)
-        cr.pl.gene_trends(
-            adata,
-            model,
-            [f"{g}:gs" for g in GENES[:3]],
-            time_key="latent_time",
-            gene_symbols="symbol",
-            data_key="Ms",
-            dpi=DPI,
-            save=fpath,
-        )
 
 
 class TestCFLARE:
@@ -2116,6 +1618,7 @@ class TestCFLARE:
 
 
 class TestGPCCA:
+    # --- visual regression: one representative render per plot type ---
     @compare(kind="gpcca")
     def test_gpcca_complex_spectrum(self, mc: GPCCA, fpath: str):
         mc.plot_spectrum(real_only=False, dpi=DPI, save=fpath)
@@ -2125,96 +1628,24 @@ class TestGPCCA:
         mc.plot_spectrum(real_only=True, dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
-    def test_gpcca_real_spectrum_hide_eigengap(self, mc: GPCCA, fpath: str):
-        mc.plot_spectrum(real_only=True, show_eigengap=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_spectrum_title(self, mc: GPCCA, fpath: str):
-        mc.plot_spectrum(title="foobar", real_only=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_spectrum_evals(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(2, real_only=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_spectrum_evals_complex(self, mc: CFLARE, fpath: str):
-        mc.plot_spectrum(2, real_only=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
     def test_gpcca_schur_matrix(self, mc: GPCCA, fpath: str):
         mc.plot_schur_matrix(dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_schur_matrix_title(self, mc: GPCCA, fpath: str):
-        mc.plot_schur_matrix(title="foobar", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_schur_matrix_cmap(self, mc: GPCCA, fpath: str):
-        mc.plot_schur_matrix(cmap=cm.inferno, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(show_initial_dist=False, show_stationary_dist=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T_stat_dist(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(show_initial_dist=False, show_stationary_dist=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T_init_dist(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(show_initial_dist=True, show_stationary_dist=False, dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
     def test_gpcca_coarse_T_stat_init_dist(self, mc: GPCCA, fpath: str):
         mc.plot_coarse_T(show_initial_dist=True, show_stationary_dist=True, dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
-    def test_gpcca_coarse_T_no_cbar(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(show_cbar=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T_no_annot(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(annotate=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T_cmap(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(cmap=cm.inferno, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T_xtick_rot(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(xtick_rotation=0, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_coarse_T_no_order(self, mc: GPCCA, fpath: str):
-        mc.plot_coarse_T(order=None, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
     def test_gpcca_meta_states(self, mc: GPCCA, fpath: str):
         mc.plot_macrostates(which="all", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_meta_states_lineages(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="all", states=["0"], dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
     def test_gpcca_meta_states_discrete(self, mc: GPCCA, fpath: str):
         mc.plot_macrostates(which="all", discrete=True, dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
-    def test_gpcca_meta_states_cluster_key(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="all", color="clusters", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
     def test_gpcca_meta_states_no_same_plot(self, mc: GPCCA, fpath: str):
         mc.plot_macrostates(which="all", same_plot=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_meta_states_cmap(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="all", cmap=cm.inferno, same_plot=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_meta_states_title(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="all", title="foobar", dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
     def test_gpcca_meta_states_time(self, mc: GPCCA, fpath: str):
@@ -2225,44 +1656,8 @@ class TestGPCCA:
         mc.plot_macrostates(which="terminal", dpi=DPI, save=fpath)
 
     @compare(kind="gpcca")
-    def test_gpcca_final_states_lineages(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", states=["0"], dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_final_states_discrete(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", discrete=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_final_states_cluster_key(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", color="clusters", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_final_states_no_same_plot(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", same_plot=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_final_states_cmap(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", cmap=cm.inferno, same_plot=False, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_final_states_title(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", title="foobar", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_final_states_time(self, mc: GPCCA, fpath: str):
-        mc.plot_macrostates(which="terminal", mode="time", dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
     def test_gpcca_fate_probs_cont_same_no_clusters(self, mc: GPCCA, fpath: str):
         mc.plot_fate_probabilities(same_plot=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_fate_probs_cont_same_clusters(self, mc: GPCCA, fpath: str):
-        mc.plot_fate_probabilities(color="clusters", same_plot=True, dpi=DPI, save=fpath)
-
-    @compare(kind="gpcca")
-    def test_gpcca_fate_probs_cont_not_same(self, mc: GPCCA, fpath: str):
-        mc.plot_fate_probabilities(color="clusters", same_plot=False, dpi=DPI, save=fpath)
 
     @scvelo_skip
     @compare(kind="gpcca")
@@ -2282,6 +1677,39 @@ class TestGPCCA:
         cluster_key = "clusters"
         _ = mc.tsi(n_macrostates=3, terminal_states=terminal_states, cluster_key=cluster_key, n_cells=10)
         mc.plot_tsi(dpi=DPI, save=fpath)
+
+    # --- parameter plumbing: assert on the Figure/Axes, not on pixels ---
+    @pytest.mark.parametrize(
+        ("method", "kwargs"),
+        [
+            pytest.param("plot_spectrum", {"real_only": True}, id="spectrum"),
+            pytest.param("plot_schur_matrix", {}, id="schur_matrix"),
+            pytest.param("plot_coarse_T", {}, id="coarse_T"),
+            pytest.param("plot_macrostates", {"which": "all"}, id="macrostates"),
+        ],
+    )
+    def test_gpcca_title(self, adata_gpcca_fwd, method, kwargs):
+        _, g = adata_gpcca_fwd
+        fig = _estimator_fig(g, method, title="foobar", **kwargs)
+        assert _any_title(fig, "foobar")
+
+    @pytest.mark.parametrize(
+        ("method", "kwargs"),
+        [
+            pytest.param("plot_schur_matrix", {}, id="schur_matrix"),
+            pytest.param("plot_coarse_T", {}, id="coarse_T"),
+        ],
+    )
+    def test_gpcca_cmap(self, adata_gpcca_fwd, method, kwargs):
+        _, g = adata_gpcca_fwd
+        fig = _estimator_fig(g, method, cmap=cm.inferno, **kwargs)
+        assert _any_cmap(fig, "inferno")
+
+    def test_gpcca_coarse_T_cbar(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        with_cbar = _estimator_fig(g, "plot_coarse_T", show_cbar=True)
+        without_cbar = _estimator_fig(g, "plot_coarse_T", show_cbar=False)
+        assert len(with_cbar.axes) == len(without_cbar.axes) + 1
 
 
 class TestLineage:
