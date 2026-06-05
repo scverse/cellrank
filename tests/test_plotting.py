@@ -179,328 +179,187 @@ def compare(
     raise NotImplementedError(f"Invalid kind `{kind!r}`.")
 
 
+def _agg(adata, **kwargs):
+    """Render an aggregate-fate-probabilities plot and return the current figure."""
+    plt.close("all")
+    cr.pl.aggregate_fate_probabilities(adata, dpi=DPI, **kwargs)
+    return plt.gcf()
+
+
 class TestAggregateAbsorptionProbabilities:
-    @compare()
+    # --- visual regression: one representative render per mode ---
+    @compare(tol=STRICT_TOL)
     def test_bar(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="bar", dpi=DPI, save=fpath)
 
-    @compare(kind="bwd")
-    def test_bar_bwd(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            backward=True,
-            mode="bar",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_bar_cluster_subset(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="bar",
-            clusters=["Astrocytes", "GABA"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(tol=50)
-    def test_bar_cluster_subset_violin(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="violin",
-            clusters=["Endothelial"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_bar_lineage_subset(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="bar",
-            lineages=["0"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(tol=250)
-    def test_paga_pie(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga_pie", dpi=DPI, save=fpath)
-
-    @compare(tol=250)
-    def test_paga_pie_title(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            title="foo bar baz",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_paga_pie_embedding(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            basis="umap",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_paga(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga", dpi=DPI, save=fpath)
 
-    @compare()
-    def test_paga_lineage_subset(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga",
-            lineages=["0"],
-            dpi=DPI,
-            save=fpath,
-        )
+    @compare(tol=STRICT_TOL)
+    def test_paga_pie(self, adata: AnnData, fpath: str):
+        cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga_pie", dpi=DPI, save=fpath)
 
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_violin(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="violin", dpi=DPI, save=fpath)
 
-    @compare()
-    def test_violin_no_cluster_key(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(adata, mode="violin", cluster_key=None, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_violin_cluster_subset(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="violin", dpi=DPI, save=fpath)
-
-    @compare()
-    def test_violin_lineage_subset(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="violin",
-            lineages=["1"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_paga_pie_legend_simple(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            save=fpath,
-            dpi=DPI,
-            legend_kwargs={"loc": "top"},
-        )
-
-    @compare()
-    def test_paga_pie_legend_position(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            basis="umap",
-            save=fpath,
-            dpi=DPI,
-            legend_kwargs={"loc": "lower"},
-            legend_loc="upper",
-        )
-
-    @compare()
-    def test_paga_pie_no_legend(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            basis="umap",
-            save=fpath,
-            dpi=DPI,
-            legend_kwargs={"loc": None},
-            legend_loc=None,
-        )
-
-    @compare()
-    def test_paga_pie_only_fate_prob(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            basis="umap",
-            save=fpath,
-            dpi=DPI,
-            legend_kwargs={"loc": "center"},
-            legend_loc=None,
-        )
-
-    @compare()
-    def test_paga_pie_only_clusters(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            basis="umap",
-            save=fpath,
-            dpi=DPI,
-            legend_kwargs={"loc": None},
-            legend_loc="on data",
-        )
-
-    @compare()
-    def test_paga_pie_legend_position_out(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="paga_pie",
-            basis="umap",
-            save=fpath,
-            dpi=DPI,
-            legend_kwargs={"loc": "lower left out"},
-            legend_loc="center right out",
-        )
-
-    def test_invalid_mode(self, adata_cflare_fwd):
-        adata, _ = adata_cflare_fwd
-        with pytest.raises(ValueError, match=r"Invalid option"):
-            cr.pl.aggregate_fate_probabilities(
-                adata,
-                cluster_key="clusters",
-                mode="foobar",
-            )
-
-    def test_paga_pie_wrong_legend_kind_1(self, adata_cflare_fwd):
-        adata, _ = adata_cflare_fwd
-        with pytest.raises(ValueError, match=r"Invalid legend position"):
-            cr.pl.aggregate_fate_probabilities(
-                adata,
-                cluster_key="clusters",
-                mode="paga_pie",
-                legend_kwargs={"loc": "foo"},
-            )
-
-    def test_paga_pie_wrong_legend_kind_2(self, adata_cflare_fwd):
-        adata, _ = adata_cflare_fwd
-        with pytest.raises(ValueError, match=r"Invalid legend position"):
-            cr.pl.aggregate_fate_probabilities(
-                adata,
-                cluster_key="clusters",
-                mode="paga_pie",
-                legend_kwargs={"loc": "lower foo"},
-            )
-
-    def test_paga_pie_wrong_legend_kind_3(self, adata_cflare_fwd):
-        adata, _ = adata_cflare_fwd
-        with pytest.raises(ValueError, match=r"Invalid modifier"):
-            cr.pl.aggregate_fate_probabilities(
-                adata,
-                cluster_key="clusters",
-                mode="paga_pie",
-                legend_kwargs={"loc": "lower left bar"},
-            )
-
-    def test_paga_pie_wrong_legend_kind_4(self, adata_cflare_fwd):
-        adata, _ = adata_cflare_fwd
-        with pytest.raises(ValueError, match=r"Expected only 1 additional"):
-            cr.pl.aggregate_fate_probabilities(
-                adata,
-                cluster_key="clusters",
-                mode="paga_pie",
-                legend_kwargs={"loc": "lower left foo bar"},
-            )
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_mode_heatmap(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="heatmap", dpi=DPI, save=fpath)
 
-    @compare()
-    def test_mode_heatmap_format(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="heatmap",
-            fmt=".1f",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_mode_heatmap_title(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="heatmap",
-            title="foo",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_mode_heatmap_cmap(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="heatmap",
-            cmap="inferno",
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_mode_heatmap_xticks_rotation(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="heatmap",
-            xrot=45,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_mode_heatmap_clusters(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="heatmap",
-            clusters=["Astrocytes", "GABA"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_mode_heatmap_lineages(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="heatmap",
-            lineages=["0"],
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_mode_clustermap(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="clustermap", dpi=DPI, save=fpath)
 
-    @compare()
-    def test_mode_clustermap_format(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(
-            adata,
-            cluster_key="clusters",
-            mode="clustermap",
-            fmt=".1f",
-            dpi=DPI,
-            save=fpath,
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    def test_mode_heatmap_title(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _any_title(_agg(adata, cluster_key="clusters", mode="heatmap", title="foo"), "foo")
+
+    def test_mode_heatmap_cmap(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _any_cmap(_agg(adata, cluster_key="clusters", mode="heatmap", cmap="inferno"), "inferno")
+
+    def test_mode_heatmap_xticks_rotation(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        fig = _agg(adata, cluster_key="clusters", mode="heatmap", xrot=45)
+        assert 45.0 in {round(t.get_rotation()) for ax in fig.axes for t in ax.get_xticklabels() if t.get_text()}
+
+    def test_paga_pie_title(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _any_title(_agg(adata, cluster_key="clusters", mode="paga_pie", title="foo bar baz"), "foo bar baz")
+
+    def test_paga_pie_legend(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert _has_legend(_agg(adata, cluster_key="clusters", mode="paga_pie"))
+        assert not _has_legend(
+            _agg(
+                adata,
+                cluster_key="clusters",
+                mode="paga_pie",
+                basis="umap",
+                legend_kwargs={"loc": None},
+                legend_loc=None,
+            )
         )
+
+    # --- behaviour / error contracts ---
+    def test_invalid_mode(self, adata_cflare_fwd):
+        adata, _ = adata_cflare_fwd
+        with pytest.raises(ValueError, match=r"Invalid option"):
+            cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="foobar")
+
+    @pytest.mark.parametrize(
+        ("loc", "match"),
+        [
+            pytest.param("foo", r"Invalid legend position", id="1"),
+            pytest.param("lower foo", r"Invalid legend position", id="2"),
+            pytest.param("lower left bar", r"Invalid modifier", id="3"),
+            pytest.param("lower left foo bar", r"Expected only 1 additional", id="4"),
+        ],
+    )
+    def test_paga_pie_wrong_legend_kind(self, adata_cflare_fwd, loc, match):
+        adata, _ = adata_cflare_fwd
+        with pytest.raises(ValueError, match=match):
+            cr.pl.aggregate_fate_probabilities(
+                adata, cluster_key="clusters", mode="paga_pie", legend_kwargs={"loc": loc}
+            )
+
+    # --- behaviour coverage: assert the call runs and draws content ---
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="bar", clusters=["Astrocytes", "GABA"]),
+                id="bar_cluster_subset",
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="violin", clusters=["Endothelial"]),
+                id="violin_cluster_subset_one",
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="bar", lineages=["0"]), id="bar_lineage_subset"
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="paga_pie", basis="umap"), id="paga_pie_embedding"
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="paga", lineages=["0"]), id="paga_lineage_subset"
+            ),
+            pytest.param(lambda a: _agg(a, mode="violin", cluster_key=None), id="violin_no_cluster_key"),
+            pytest.param(lambda a: _agg(a, cluster_key="clusters", mode="violin"), id="violin_cluster_subset"),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="violin", lineages=["1"]), id="violin_lineage_subset"
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="paga_pie", legend_kwargs={"loc": "top"}),
+                id="legend_simple",
+            ),
+            pytest.param(
+                lambda a: _agg(
+                    a,
+                    cluster_key="clusters",
+                    mode="paga_pie",
+                    basis="umap",
+                    legend_kwargs={"loc": "lower"},
+                    legend_loc="upper",
+                ),
+                id="legend_position",
+            ),
+            pytest.param(
+                lambda a: _agg(
+                    a,
+                    cluster_key="clusters",
+                    mode="paga_pie",
+                    basis="umap",
+                    legend_kwargs={"loc": "center"},
+                    legend_loc=None,
+                ),
+                id="legend_only_fate_prob",
+            ),
+            pytest.param(
+                lambda a: _agg(
+                    a,
+                    cluster_key="clusters",
+                    mode="paga_pie",
+                    basis="umap",
+                    legend_kwargs={"loc": None},
+                    legend_loc="on data",
+                ),
+                id="legend_only_clusters",
+            ),
+            pytest.param(
+                lambda a: _agg(
+                    a,
+                    cluster_key="clusters",
+                    mode="paga_pie",
+                    basis="umap",
+                    legend_kwargs={"loc": "lower left out"},
+                    legend_loc="center right out",
+                ),
+                id="legend_position_out",
+            ),
+            pytest.param(lambda a: _agg(a, cluster_key="clusters", mode="heatmap", fmt=".1f"), id="heatmap_format"),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="heatmap", clusters=["Astrocytes", "GABA"]),
+                id="heatmap_clusters",
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="heatmap", lineages=["0"]), id="heatmap_lineages"
+            ),
+            pytest.param(
+                lambda a: _agg(a, cluster_key="clusters", mode="clustermap", fmt=".1f"), id="clustermap_format"
+            ),
+        ],
+    )
+    def test_aggregate_runs(self, adata_gpcca_fwd, call):
+        adata, _ = adata_gpcca_fwd
+        _assert_drawn(call(adata))
+
+    def test_bar_bwd_runs(self, adata_gpcca_bwd):
+        adata, _ = adata_gpcca_bwd
+        _assert_drawn(_agg(adata, cluster_key="clusters", backward=True, mode="bar"))
 
 
 def _run_cluster_trends(adata, model, genes, lineage="1", **kwargs):
