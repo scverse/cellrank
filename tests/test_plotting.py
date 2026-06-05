@@ -1976,10 +1976,24 @@ class TestPlotRandomWalk:
             save=fpath,
         )
 
+    # --- parameter plumbing: assert on the walk LineCollections, not on pixels ---
+    def test_kernel_random_walk_line_width(self, adata_gpcca_fwd):
+        _, g = adata_gpcca_fwd
+        fig = _draw(lambda: g.kernel.plot_random_walks(n_sims=10, max_iter=100, seed=42, linewidth=4, dpi=DPI))
+        lcs = [c for ax in fig.axes for c in ax.collections if type(c).__name__ == "LineCollection"]
+        assert lcs
+        assert max(float(w) for c in lcs for w in c.get_linewidths()) == 4
+        plt.close("all")
+
     # --- behaviour coverage: assert the call runs and draws content ---
+    # `cmap` stays here: with the default (non-continuous) colouring it does not recolour the
+    # walk LineCollections, so there is no stable property to introspect.
     @pytest.mark.parametrize(
         "call",
         [
+            pytest.param(
+                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, cmap="cividis", dpi=DPI), id="cmap"
+            ),
             pytest.param(
                 lambda k: k.plot_random_walks(
                     n_sims=10,
@@ -1993,12 +2007,6 @@ class TestPlotRandomWalk:
             ),
             pytest.param(
                 lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, basis="pca", dpi=DPI), id="basis"
-            ),
-            pytest.param(
-                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, cmap="viridis", dpi=DPI), id="cmap"
-            ),
-            pytest.param(
-                lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, linewidth=2, dpi=DPI), id="line_width"
             ),
             pytest.param(
                 lambda k: k.plot_random_walks(n_sims=10, max_iter=100, seed=42, linealpha=1, dpi=DPI), id="line_alpha"
