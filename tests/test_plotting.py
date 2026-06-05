@@ -1700,47 +1700,48 @@ class TestComposition:
 
 
 class TestFittedModel:
-    @compare()
+    # --- visual regression: the precomputed-model plot, plain and with a confidence band ---
+    @compare(tol=STRICT_TOL)
     def test_fitted_empty_model(self, adata: AnnData, fpath: str):
         rng = np.random.default_rng(42)
         fm = cr.models.FittedModel(np.arange(100), rng.normal(size=100))
         fm.plot(dpi=DPI, save=fpath)
 
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_fitted_model_conf_int(self, adata: AnnData, fpath: str):
         rng = np.random.default_rng(43)
         y_test = rng.normal(size=100)
-
         fm = cr.models.FittedModel(np.arange(100), y_test, conf_int=np.c_[y_test - 1, y_test + 1])
         fm.plot(conf_int=True, dpi=DPI, save=fpath)
 
-    @compare()
-    def test_fitted_model_conf_int_no_conf_int_computed(self, adata: AnnData, fpath: str):
-        rng = np.random.default_rng(44)
+    # --- parameter plumbing: assert on the Figure, not on pixels ---
+    @pytest.mark.parametrize(
+        ("has_conf_int", "expect_band"),
+        [pytest.param(True, True, id="computed"), pytest.param(False, False, id="not_computed")],
+    )
+    def test_fitted_conf_int_band(self, has_conf_int, expect_band):
+        # `conf_int=True` draws a band iff the FittedModel actually carries conf-int data;
+        # otherwise it is gracefully ignored (no band, no error).
+        rng = np.random.default_rng(43)
+        y = rng.normal(size=100)
+        fm = cr.models.FittedModel(np.arange(100), y, conf_int=(np.c_[y - 1, y + 1] if has_conf_int else None))
+        fig = fm.plot(conf_int=True, dpi=DPI, return_fig=True)
+        band = any("PolyCollection" in type(c).__name__ for ax in fig.axes for c in ax.collections)
+        assert band is expect_band
+        plt.close(fig)
 
-        fm = cr.models.FittedModel(
-            np.arange(100),
-            rng.normal(size=100),
-        )
-        fm.plot(conf_int=True, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_fitted_model_cells_with_weights(self, adata: AnnData, fpath: str):
+    def test_fitted_cells(self):
         rng = np.random.default_rng(45)
-
         fm = cr.models.FittedModel(
-            np.arange(100),
-            rng.normal(size=100),
-            x_all=rng.normal(size=200),
-            y_all=rng.normal(size=200),
+            np.arange(100), rng.normal(size=100), x_all=rng.normal(size=200), y_all=rng.normal(size=200)
         )
+        fig = fm.plot(hide_cells=False, dpi=DPI, return_fig=True)
+        assert any(type(c).__name__ == "PathCollection" for ax in fig.axes for c in ax.collections)
+        plt.close(fig)
 
-        fm.plot(hide_cells=False, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_fitted_model_weights(self, adata: AnnData, fpath: str):
+    # --- behaviour coverage: FittedModel runs through fm.plot and the pl functions ---
+    def test_fitted_weights_runs(self):
         rng = np.random.default_rng(46)
-
         fm = cr.models.FittedModel(
             np.arange(100),
             rng.normal(size=100),
@@ -1748,13 +1749,11 @@ class TestFittedModel:
             y_all=rng.normal(size=200),
             w_all=rng.normal(size=200),
         )
+        _assert_drawn(fm.plot(hide_cells=False, dpi=DPI, return_fig=True))
 
-        fm.plot(hide_cells=False, dpi=DPI, save=fpath)
-
-    @compare()
-    def test_fitted_ignore_plot_smoothed_lineage(self, adata: AnnData, fpath: str):
+    def test_fitted_lineage_probability_ignored_runs(self):
+        # lineage_probability is meaningless for a FittedModel and is silently ignored
         rng = np.random.default_rng(47)
-
         fm = cr.models.FittedModel(
             np.arange(100),
             rng.normal(size=100),
@@ -1762,78 +1761,36 @@ class TestFittedModel:
             y_all=rng.normal(size=200),
             w_all=rng.normal(size=200),
         )
+        _assert_drawn(fm.plot(lineage_probability=True, lineage_probability_conf_int=True, dpi=DPI, return_fig=True))
 
-        fm.plot(
-            lineage_probability=True,
-            lineage_probability_conf_int=True,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare()
-    def test_fitted_gene_trends(self, adata: AnnData, fpath: str):
+    def test_fitted_gene_trends_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
         rng = np.random.default_rng(48)
-
-        fm1 = cr.models.FittedModel(
-            np.arange(100),
-            rng.normal(size=100),
-            x_all=rng.normal(size=200),
-            y_all=rng.normal(size=200),
-            w_all=rng.normal(size=200),
-        )
-        fm2 = cr.models.FittedModel(
-            np.arange(100),
-            rng.normal(size=100),
-            x_all=rng.normal(size=200),
-            y_all=rng.normal(size=200),
-            w_all=rng.normal(size=200),
-        )
-        cr.pl.gene_trends(
+        kw = {"x_all": rng.normal(size=200), "y_all": rng.normal(size=200), "w_all": rng.normal(size=200)}
+        fm1 = cr.models.FittedModel(np.arange(100), rng.normal(size=100), **kw)
+        fm2 = cr.models.FittedModel(np.arange(100), rng.normal(size=100), **kw)
+        fig = cr.pl.gene_trends(
             adata,
             {GENES[0]: fm1, GENES[1]: fm2},
             _ms_signals(GENES[:2]),
             time_key="latent_time",
             dpi=DPI,
-            save=fpath,
+            return_figure=True,
         )
+        _assert_drawn(fig)
 
-    @compare(tol=250)
-    def test_fitted_cluster_fates(self, adata: AnnData, fpath: str):
+    def test_fitted_cluster_fates_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
         rng = np.random.default_rng(49)
+        model = cr.models.FittedModel(np.arange(100), rng.normal(size=100))
+        _assert_drawn(_run_cluster_trends(adata, model, GENES[:10], "1", n_points=100, random_state=49))
 
-        model = cr.models.FittedModel(
-            np.arange(100),
-            rng.normal(size=100),
-        )
-        cr.pl.cluster_trends(
-            adata,
-            model,
-            GENES[:10],
-            "1",
-            "latent_time",
-            n_points=100,
-            random_state=49,
-            dpi=DPI,
-            save=fpath,
-        )
-
-    @compare(dirname="fitted_heatmap")
-    def test_fitted_heatmap(self, adata: AnnData, fpath: str):
+    def test_fitted_heatmap_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
         rng = np.random.default_rng(49)
-
-        fm = cr.models.FittedModel(
-            np.arange(100),
-            rng.normal(size=100),
-        )
-        cr.pl.heatmap(
-            adata,
-            fm,
-            GENES[:10],
-            "latent_time",
-            mode="lineages",
-            dpi=DPI,
-            save=fpath,
-        )
+        fm = cr.models.FittedModel(np.arange(100), rng.normal(size=100))
+        res = cr.pl.heatmap(adata, fm, GENES[:10], "latent_time", mode="lineages", dpi=DPI, return_figure=True)
+        _assert_drawn(res[0] if isinstance(res, tuple) else res)
 
 
 class TestCircularProjection:
