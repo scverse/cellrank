@@ -192,16 +192,22 @@ class TestAggregateAbsorptionProbabilities:
     def test_bar(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="bar", dpi=DPI, save=fpath)
 
-    # `paga`/`paga_pie` use a force-directed node layout whose positions differ across platforms
-    # (macOS vs Linux CI) by more than STRICT_TOL, so they keep an elevated, platform-tolerant
-    # tolerance -- this is genuine layout drift, not the over-ratcheting seen elsewhere.
-    @compare(tol=150)
+    # Position paga nodes from the UMAP embedding (deterministic across platforms). scanpy's
+    # default force-directed layout is intentionally NOT pixel-tested: its node positions diverge
+    # between macOS and Linux by >100 RMS (igraph's iterative FR layout, platform-dependent even
+    # when seeded), and that layout is scanpy's concern, not cellrank's. The no-basis path is still
+    # exercised (without a pixel compare) by the paga_pie title/legend introspection tests.
+    @compare(tol=STRICT_TOL)
     def test_paga(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga", dpi=DPI, save=fpath)
+        cr.pl.aggregate_fate_probabilities(
+            adata, cluster_key="clusters", mode="paga", basis="umap", dpi=DPI, save=fpath
+        )
 
-    @compare(tol=250)
+    @compare(tol=STRICT_TOL)
     def test_paga_pie(self, adata: AnnData, fpath: str):
-        cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga_pie", dpi=DPI, save=fpath)
+        cr.pl.aggregate_fate_probabilities(
+            adata, cluster_key="clusters", mode="paga_pie", basis="umap", dpi=DPI, save=fpath
+        )
 
     @compare(tol=STRICT_TOL)
     def test_violin(self, adata: AnnData, fpath: str):
