@@ -192,11 +192,14 @@ class TestAggregateAbsorptionProbabilities:
     def test_bar(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="bar", dpi=DPI, save=fpath)
 
-    @compare(tol=STRICT_TOL)
+    # `paga`/`paga_pie` use a force-directed node layout whose positions differ across platforms
+    # (macOS vs Linux CI) by more than STRICT_TOL, so they keep an elevated, platform-tolerant
+    # tolerance -- this is genuine layout drift, not the over-ratcheting seen elsewhere.
+    @compare(tol=150)
     def test_paga(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga", dpi=DPI, save=fpath)
 
-    @compare(tol=STRICT_TOL)
+    @compare(tol=250)
     def test_paga_pie(self, adata: AnnData, fpath: str):
         cr.pl.aggregate_fate_probabilities(adata, cluster_key="clusters", mode="paga_pie", dpi=DPI, save=fpath)
 
