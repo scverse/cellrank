@@ -203,6 +203,7 @@ def _fit_bulk_helper[Queue](
     time_range: Sequence[float | tuple[float, float]],
     return_models: bool = False,
     queue: Queue | None = None,
+    signals: Mapping[str, Any] | None = None,
     **kwargs,
 ) -> dict[str, dict[str, BaseModel]]:
     """Fit model for given genes and lineages.
@@ -247,7 +248,10 @@ def _fit_bulk_helper[Queue](
             model = models[gene][ln]
             model._is_bulk = True
 
-            model = cb(model, gene=gene, lineage=ln, time_range=tr, **kwargs)
+            # `signals` maps the (string) result key to the `Signal` actually fetched/fitted;
+            # without it we fall back to passing the bare name (legacy `data_key` path).
+            signal = signals[gene] if signals is not None else gene
+            model = cb(model, gene=signal, lineage=ln, time_range=tr, **kwargs)
             model = model.fit()
             # GAMR is a bit faster if we don't need the conf int
             # if it's needed, `.predict` will calculate it and `confidence_interval` will do nothing
@@ -279,6 +283,7 @@ def _fit_bulk(
     parallel_kwargs: dict,
     return_models: bool = False,
     filter_all_failed: bool = True,
+    signals: Mapping[str, Any] | None = None,
     **kwargs,
 ) -> tuple[_return_model_type, _return_model_type, Sequence[str], Sequence[str]]:
     """Fit models for given genes and lineages.
@@ -331,12 +336,19 @@ def _fit_bulk(
     backend = parallel_kwargs.pop("backend", DEFAULT_BACKEND)
     show_progress_bar = parallel_kwargs.pop("show_progress_bar", True)
 
+    if signals is not None:
+        from cellrank.models._data import Gene
+
+        unit = "gene" if all(isinstance(s, Gene) for s in signals.values()) else "obs"
+    else:
+        unit = "gene" if kwargs.get("data_key", "gene") != "obs" else "obs"
+
     _start = _time.perf_counter()
     logger.info("Computing trends using %d core(s)", n_jobs)
     models = parallelize(
         _fit_bulk_helper,
         genes,
-        unit="gene" if kwargs.get("data_key", "gene") != "obs" else "obs",
+        unit=unit,
         n_jobs=n_jobs,
         backend=backend,
         show_progress_bar=show_progress_bar,
@@ -347,6 +359,7 @@ def _fit_bulk(
         lineages=lineages,
         time_range=time_range,
         return_models=return_models,
+        signals=signals,
         **kwargs,
     )
     logger.info("    Finish (%.2fs)", _time.perf_counter() - _start)
@@ -425,6 +438,7 @@ def _trends_helper(
     gene_as_title: bool = False,
     cell_color: str | None = None,
     legend_loc: str | None = "best",
+    ylabel_default: str = "expression",
     fig: mpl.figure.Figure = None,
     axes: mpl.axes.Axes | Sequence[mpl.axes.Axes] = None,
     **kwargs: Any,
@@ -462,6 +476,9 @@ def _trends_helper(
         Whether to use the gene names as titles (with lineage names as well) or on the y-axis.
     legend_loc
         Location of the legend. If :obj:`None`, don't show any legend.
+    ylabel_default
+        Default y-axis label used when ``gene_as_title = True``. For example, ``'expression'`` for
+        gene expression or ``'value'`` for per-cell values fetched from :attr:`~anndata.AnnData.obs`.
     fig
         Figure to use.
     ax
@@ -566,14 +583,14 @@ def _trends_helper(
         if same_plot:
             if gene_as_title:
                 title = gene
-                ylabel = "expression" if show_ylabel else None
+                ylabel = ylabel_default if show_ylabel else None
             else:
                 title = ""
                 ylabel = gene
         else:
             if gene_as_title:
                 title = None
-                ylabel = "expression" if not ylabel_shown else None
+                ylabel = ylabel_default if not ylabel_shown else None
             else:
                 title = (name if name is not None else "no lineage") if show_lineage[i] else ""
                 ylabel = gene if not ylabel_shown else None
@@ -728,6 +745,7 @@ def _create_callbacks(
     obs: Sequence[str],
     lineages: Sequence[str | None],
     perform_sanity_check: bool | None = None,
+    signals: Mapping[str, Any] | None = None,
     **kwargs,
 ) -> dict[str, dict[str, Callable]]:
     """Create models for each gene and lineage.
@@ -797,13 +815,17 @@ def _create_callbacks(
             for lineage, cb in callbacks[gene].items():
                 # create the model here because the callback can search the attribute
                 dummy_model = SKLearnModel(adata, model=SVR())
+                signal = signals[gene] if signals is not None else gene
+                expected_name = signals[gene].name if signals is not None else gene
                 try:
-                    model = cb(dummy_model, gene=gene, lineage=lineage, **kwargs)
+                    model = cb(dummy_model, gene=signal, lineage=lineage, **kwargs)
                     assert model is dummy_model, (
                         "Creation of new models is not allowed. Ensure that callback returns the same model."
                     )
                     assert model.prepared, "Model is not prepared. Ensure that callback calls `.prepare()`."
-                    assert model._gene == gene, f"Callback modified the gene from `{gene!r}` to `{model._gene!r}`."
+                    assert model._gene == expected_name, (
+                        f"Callback modified the gene from `{expected_name!r}` to `{model._gene!r}`."
+                    )
                     assert model._lineage == lineage, (
                         f"Callback modified the lineage from `{lineage!r}` to `{model._lineage!r}`."
                     )
@@ -888,6 +910,30 @@ def _create_callbacks(
 def _default_model_callback(model: BaseModel, **kwargs) -> BaseModel:
     # we could filter kwargs, but it's better not to - this will detect if we pass useless stuff
     return model.prepare(**kwargs)
+
+
+def _build_gene_signals(
+    adata: AnnData,
+    genes: Sequence[str],
+    *,
+    data_key: str | None = None,
+    use_raw: bool = False,
+) -> dict[str, Any]:
+    """Build and validate a name-keyed mapping of :class:`~cellrank.models.Gene` signals.
+
+    Used by gene-only trajectory plots (``heatmap``, ``cluster_trends``) to fit through the same
+    :class:`~cellrank.models.Signal` machinery as ``gene_trends`` without the deprecated ``data_key``
+    path. ``data_key`` is interpreted as a layer (``None``/``'X'`` meaning :attr:`~anndata.AnnData.X`).
+    """
+    from cellrank.models._data import Gene
+
+    layer = None if data_key in (None, "X") else data_key
+    signals = {}
+    for gene in genes:
+        signal = Gene(gene, layer=layer, use_raw=use_raw)
+        signal.validate(adata)
+        signals[gene] = signal
+    return signals
 
 
 @d.dedent

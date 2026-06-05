@@ -1,6 +1,7 @@
 import logging
 import pathlib
 import types
+import warnings
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -16,11 +17,11 @@ from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
 from cellrank._utils._parallelize import _get_n_cores
 from cellrank._utils._utils import (
-    _check_collection,
     _genesymbols,
     _unique_order_preserving,
     save_fig,
 )
+from cellrank.models._data import _UNSET, Gene, Signal, _coerce_signal
 from cellrank.pl._utils import (
     _callback_type,
     _create_callbacks,
@@ -42,11 +43,11 @@ __all__ = ["gene_trends"]
 def gene_trends(
     adata: AnnData,
     model: _input_model_type,
-    genes: str | Sequence[str],
-    time_key: str,
+    signals: "str | Signal | Sequence[str | Signal]" = _UNSET,
+    time_key: str = _UNSET,
     lineages: str | Sequence[str] | None = None,
     backward: bool = False,
-    data_key: str = "X",
+    data_key: str = _UNSET,
     time_range: _time_range_type | list[_time_range_type] | None = None,
     transpose: bool = False,
     callback: _callback_type = None,
@@ -79,6 +80,7 @@ def gene_trends(
     save: str | pathlib.Path | None = None,
     return_figure: bool = False,
     plot_kwargs: Mapping[str, Any] = types.MappingProxyType({}),
+    genes: "str | Sequence[str]" = _UNSET,
     **kwargs: Any,
 ) -> _return_model_type | None:
     """Plot gene expression trends along lineages.
@@ -88,21 +90,41 @@ def gene_trends(
           visualize the gene trends.
 
     Each lineage is defined via its lineage weights. This function accepts any model based off
-    :class:`~cellrank.models.BaseModel` to fit gene expression, where we take the lineage weights
+    :class:`~cellrank.models.BaseModel` to fit a trend, where we take the lineage weights
     into account in the loss function.
+
+    Beyond gene expression, any observation-aligned quantity that varies continuously along the
+    trajectory can be plotted by passing the appropriate :class:`~cellrank.models.Signal`:
+    :class:`~cellrank.models.Gene` (expression from :attr:`~anndata.AnnData.X`, a layer or
+    :attr:`~anndata.AnnData.raw`), :class:`~cellrank.models.Obs` (a per-cell covariate in
+    :attr:`~anndata.AnnData.obs`, e.g. a gene module score from :func:`~scanpy.tl.score_genes`), or
+    :class:`~cellrank.models.Obsm` (a column of an :attr:`~anndata.AnnData.obsm` array or
+    :class:`~pandas.DataFrame`). Signals of different kinds may be mixed in a single call.
 
     Parameters
     ----------
     %(adata)s
     %(model)s
-    %(genes)s
+    signals
+        What to fit and plot along the trajectory. One or more of:
+
+        - a gene name in :attr:`~anndata.AnnData.var_names` (shorthand for :class:`~cellrank.models.Gene`),
+        - a :class:`~cellrank.models.Gene`, e.g. ``Gene('Gata1', layer='Ms')`` or ``Gene('Gata1', use_raw=True)``,
+        - an :class:`~cellrank.models.Obs`, e.g. ``Obs('module_score')``,
+        - an :class:`~cellrank.models.Obsm`, e.g. ``Obsm('X_pca', 0)`` or ``Obsm('palantir', 'pseudotime')``.
+
+        .. versionadded:: 2.3
     time_key
         Key in :attr:`~anndata.AnnData.obs` where the pseudotime is stored.
     lineages
         Names of the lineages to plot. If :obj:`None`, plot all lineages.
     %(backward)s
     data_key
-        Key in :attr:`~anndata.AnnData.layers` or ``'X'`` for :attr:`~anndata.AnnData.X` where the data is stored.
+        .. deprecated:: 2.4
+            Encode the data source in the signal instead, e.g. ``Gene(name, layer='Ms')`` or ``Obs(name)``.
+    genes
+        .. deprecated:: 2.4
+            Renamed to ``signals``, which also accepts :class:`~cellrank.models.Signal` objects.
     %(time_range)s
         This can also be specified on per-lineage basis.
     %(gene_symbols)s
@@ -170,16 +192,56 @@ def gene_trends(
     -------
     %(plots_or_returns_models)s
     """
-    if isinstance(genes, str):
-        genes = [genes]
-    genes = _unique_order_preserving(genes)
+    # resolve the deprecated `genes` alias
+    if genes is not _UNSET:
+        if signals is not _UNSET:
+            raise TypeError("Got both `signals` and the deprecated `genes`; pass only `signals`.")
+        warnings.warn(
+            "`genes` will be deprecated in CellRank 2.4; use `signals`, which also accepts "
+            "`Gene`/`Obs`/`Obsm` objects.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        signals = genes
+    if signals is _UNSET:
+        raise TypeError("Missing the required `signals` argument.")
+    if time_key is _UNSET:
+        raise TypeError("Missing the required `time_key` argument.")
 
-    _check_collection(
-        adata,
-        genes,
-        "obs" if data_key == "obs" else "var_names",
-        use_raw=kwargs.get("use_raw", False),
-    )
+    # fold the deprecated `data_key`/`use_raw` into bare-string (`Gene`) signals; warn once
+    data_key_legacy = data_key is not _UNSET
+    use_raw_legacy = "use_raw" in kwargs
+    use_raw = kwargs.pop("use_raw", _UNSET)
+    if data_key_legacy or use_raw_legacy:
+        warnings.warn(
+            "`data_key`/`use_raw` will be deprecated in CellRank 2.4; encode the data source in the signal "
+            "instead, e.g. `Gene(name, layer=...)`, `Gene(name, use_raw=True)` or `Obs(name)`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    if isinstance(signals, (str, Signal)):
+        signals = [signals]
+    signal_objs = [
+        s
+        if isinstance(s, Signal)
+        else _coerce_signal(
+            s,
+            data_key=data_key if data_key_legacy else _UNSET,
+            use_raw=use_raw if use_raw_legacy else _UNSET,
+            warn=False,
+        )
+        for s in signals
+    ]
+    signal_objs = _unique_order_preserving(signal_objs)
+    for s in signal_objs:
+        s.validate(adata)
+    names = [s.name for s in signal_objs]
+    if len(set(names)) != len(names):
+        raise ValueError(f"Signals map to duplicate names `{names}`; use distinct sources.")
+    signals_by_name = dict(zip(names, signal_objs))
+    genes = names
+    ylabel_default = "expression" if all(isinstance(s, Gene) for s in signal_objs) else "value"
 
     probs = Lineage.from_adata(adata, backward=backward)
     if lineages is None:
@@ -198,19 +260,19 @@ def gene_trends(
         raise ValueError(f"Expected time ranges to be of length `{len(lineages)}`, found `{len(time_range)}`.")
 
     kwargs["time_key"] = time_key
-    kwargs["data_key"] = data_key
     kwargs["backward"] = backward
     kwargs["conf_int"] = conf_int  # prepare doesnt take or need this
     models = _create_models(model, genes, lineages)
 
     all_models, models, genes, lineages = _fit_bulk(
         models,
-        _create_callbacks(adata, callback, genes, lineages, **kwargs),
+        _create_callbacks(adata, callback, genes, lineages, signals=signals_by_name, **kwargs),
         genes,
         lineages,
         time_range,
         return_models=True,
         filter_all_failed=False,
+        signals=signals_by_name,
         parallel_kwargs={
             "show_progress_bar": show_progress_bar,
             "n_jobs": _get_n_cores(n_jobs, len(genes)),
@@ -308,6 +370,7 @@ def gene_trends(
                 sharey=sharey,
                 gene_as_title=gene_as_title,
                 legend_loc=legend_loc,
+                ylabel_default=ylabel_default,
                 figsize=figsize,
                 fig=fig,
                 axes=axes[row, col] if same_plot else axes[cnt],

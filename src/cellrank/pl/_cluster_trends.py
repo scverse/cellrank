@@ -17,12 +17,12 @@ from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t
 from cellrank._utils._parallelize import _get_n_cores
 from cellrank._utils._utils import (
-    _check_collection,
     _genesymbols,
     _unique_order_preserving,
     save_fig,
 )
 from cellrank.pl._utils import (
+    _build_gene_signals,
     _callback_type,
     _create_callbacks,
     _create_models,
@@ -183,11 +183,12 @@ def cluster_trends(
 
         return ax if sharey else None
 
-    use_raw = kwargs.get("use_raw", False)
     _ = Lineage.from_adata(adata, backward=backward)[lineage]  # sanity check
 
     genes = _unique_order_preserving(genes)
-    _check_collection(adata, genes, "var_names", use_raw=use_raw)
+    signals = _build_gene_signals(
+        adata, genes, data_key=kwargs.pop("data_key", None), use_raw=kwargs.pop("use_raw", False)
+    )
 
     if key is None:
         key = f"lineage_{lineage}_trend"
@@ -199,12 +200,13 @@ def cluster_trends(
         models = _create_models(model, genes, [lineage])
         all_models, models, genes, _ = _fit_bulk(
             models,
-            _create_callbacks(adata, callback, genes, [lineage], **kwargs),
+            _create_callbacks(adata, callback, genes, [lineage], signals=signals, **kwargs),
             genes,
             lineage,
             time_range,
             return_models=True,  # always return (better error messages)
             filter_all_failed=True,
+            signals=signals,
             parallel_kwargs={
                 "show_progress_bar": show_progress_bar,
                 "n_jobs": _get_n_cores(n_jobs, len(genes)),

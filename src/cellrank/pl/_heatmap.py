@@ -24,7 +24,6 @@ from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t, ModeEnum
 from cellrank._utils._parallelize import _get_n_cores
 from cellrank._utils._utils import (
-    _check_collection,
     _genesymbols,
     _min_max_scale,
     _unique_order_preserving,
@@ -32,6 +31,7 @@ from cellrank._utils._utils import (
     valuedispatch,
 )
 from cellrank.pl._utils import (
+    _build_gene_signals,
     _callback_type,
     _create_callbacks,
     _create_models,
@@ -495,19 +495,22 @@ def heatmap(
     if isinstance(genes, str):
         genes = [genes]
     genes = _unique_order_preserving(genes)
-    _check_collection(adata, genes, "var_names", use_raw=kwargs.get("use_raw", False))
+    signals = _build_gene_signals(
+        adata, genes, data_key=kwargs.pop("data_key", None), use_raw=kwargs.pop("use_raw", False)
+    )
 
     kwargs["backward"] = backward
     kwargs["time_key"] = time_key
     models = _create_models(model, genes, lineages)
     all_models, data, genes, lineages = _fit_bulk(
         models,
-        _create_callbacks(adata, callback, genes, lineages, **kwargs),
+        _create_callbacks(adata, callback, genes, lineages, signals=signals, **kwargs),
         genes,
         lineages,
         time_range,
         return_models=True,  # always return (better error messages)
         filter_all_failed=True,
+        signals=signals,
         parallel_kwargs={
             "show_progress_bar": show_progress_bar,
             "n_jobs": _get_n_cores(n_jobs, len(genes)),

@@ -26,6 +26,7 @@ from cellrank._utils._enum import ModeEnum
 from cellrank._utils._lineage import Lineage
 from cellrank._utils._utils import _densify_squeeze, _minmax, save_fig, valuedispatch
 from cellrank.kernels.mixins import IOMixin
+from cellrank.models._data import _UNSET, Signal, _coerce_signal
 
 logger = logging.getLogger(__name__)
 __all__ = ["BaseModel"]
@@ -176,6 +177,7 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
         self._n_obs = 0 if adata is None else adata.n_obs
         self._model = model
         self._gene = None
+        self._signal = None
         self._use_raw = False
         self._data_key = None
         self._lineage = None
@@ -204,6 +206,11 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
     def prepared(self):
         """Whether the model is prepared for fitting."""
         return self._prepared
+
+    @property
+    def signal(self) -> "Signal | None":
+        """The :class:`~cellrank.models.Signal` this model was prepared with, or :obj:`None`."""
+        return self._signal
 
     @property
     @d.dedent
@@ -296,24 +303,31 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
     @d.dedent
     def prepare(
         self,
-        gene: str,
-        lineage: str | None,
-        time_key: str,
+        signal: "str | Signal" = _UNSET,
+        lineage: str | None = _UNSET,
+        time_key: str = _UNSET,
         backward: bool = False,
         time_range: float | tuple[float, float] | None = None,
-        data_key: str | None = "X",
-        use_raw: bool = False,
+        data_key: str | None = _UNSET,
+        use_raw: bool = _UNSET,
         threshold: float | None = None,
         weight_threshold: float | tuple[float, float] = (0.01, 0.01),
         filter_cells: float | None = None,
         n_test_points: int = 200,
+        *,
+        gene: "str | Signal" = _UNSET,
     ) -> "BaseModel":
         """Prepare the model to be ready for fitting.
 
         Parameters
         ----------
-        gene
-            Gene in :attr:`~anndata.AnnData.var_names`.
+        signal
+            The observation-aligned quantity to fit along the trajectory. Either a
+            :class:`~cellrank.models.Signal` (:class:`~cellrank.models.Gene`, :class:`~cellrank.models.Obs`
+            or :class:`~cellrank.models.Obsm`) or, as a shorthand, a gene name in
+            :attr:`~anndata.AnnData.var_names` (equivalent to :class:`~cellrank.models.Gene`).
+
+            .. versionadded:: 2.3
         lineage
             Name of the lineage. If :obj:`None`, all weights will be set to :math:`1`.
         time_key
@@ -321,10 +335,15 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
         %(backward)s
         %(time_range)s
         data_key
-            Key in :attr:`~anndata.AnnData.layers` or ``'X'`` for :attr:`~anndata.AnnData.X`.
-            If ``use_raw = True``, it's always set to ``'X'``.
+            .. deprecated:: 2.4
+                Pass a :class:`~cellrank.models.Signal` via ``signal`` instead, e.g.
+                ``Gene(name, layer=...)`` or ``Obs(name)``.
         use_raw
-            Whether to access :attr:`~anndata.AnnData.raw`.
+            .. deprecated:: 2.4
+                Pass ``Gene(name, use_raw=True)`` via ``signal`` instead.
+        gene
+            .. deprecated:: 2.4
+                Renamed to ``signal``, which also accepts :class:`~cellrank.models.Signal` objects.
         threshold
             Consider only cells with weights > ``threshold`` when estimating the test endpoint.
             If :obj:`None`, use the median of the weights.
@@ -349,33 +368,22 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
         - :attr:`x_test` - %(base_model_x_test.summary)s
         - :attr:`prepared` - %(base_model_prepared.summary)s
         """
-        if use_raw:
-            if self.adata.raw is None:
-                raise AttributeError("AnnData object has no attribute `.raw`.")
-            if data_key != "X":
-                data_key = "X"
-        self._use_raw = use_raw
+        signal = _coerce_signal(signal, gene=gene, data_key=data_key, use_raw=use_raw)
+        signal.validate(self.adata)
+        self._use_raw = signal.use_raw
+        # the layer (if any) is also used to fetch `cell_color` genes consistently with the trend
+        self._data_key = signal.layer
 
-        if data_key not in ["X", "obs", None] + list(self.adata.layers.keys()):
-            raise KeyError(
-                f"Data key must be a key of `adata.layers`: `{list(self.adata.layers.keys())}`, "
-                f"`adata.X` or `adata.obs`."
-            )
+        if lineage is _UNSET:
+            raise TypeError("Missing the required `lineage` argument.")
+        if time_key is _UNSET:
+            raise TypeError("Missing the required `time_key` argument.")
 
         if lineage is not None:
             probs = Lineage.from_adata(self.adata, backward=backward)[lineage]
 
         if time_key not in self.adata.obs:
             raise KeyError(f"Time key `{time_key!r}` not found in `adata.obs`.")
-
-        if data_key == "obs":
-            if gene not in self.adata.obs:
-                raise KeyError(f"Unable to find data in `adata.obs[{gene!r}]`.")
-        else:
-            if use_raw and gene not in self.adata.raw.var_names:
-                raise KeyError(f"Gene `{gene!r}` not found in `adata.raw.var_names`.")
-            if not use_raw and gene not in self.adata.var_names:
-                raise KeyError(f"Gene `{gene!r}` not found in `adata.var_names`.")
 
         if not isinstance(time_range, (type(None), float, int, tuple)):
             raise TypeError(
@@ -405,21 +413,7 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
         self._obs_names = self.adata.obs_names.values[:]
 
         x = np.array(self.adata.obs[time_key]).astype(self._dtype)
-
-        adata = self.adata.raw.to_adata() if use_raw else self.adata
-        gene_ix = np.where(adata.var_names == gene)[0]
-
-        if data_key in ("X", None):
-            y = adata.X[:, gene_ix]
-            self._data_key = None
-        elif data_key == "obs":
-            y = adata.obs[gene].values
-            # don't set data_key, it's just when `cell_color = ...`
-        elif data_key in adata.layers:
-            y = adata.layers[data_key][:, gene_ix]
-            self._data_key = data_key
-        else:
-            raise NotImplementedError(f"Data key `{data_key!r}` is not implemented.")
+        y = signal.fetch(self.adata, dtype=self._dtype)
 
         if lineage is not None:
             weight_threshold, val = weight_threshold
@@ -427,15 +421,6 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
             w[w < weight_threshold] = val
         else:
             w = np.ones(len(x), dtype=self._dtype)
-
-        if use_raw:
-            correct_ixs = np.isin(self.adata.obs_names, adata.obs_names)
-            x = x[correct_ixs]
-            y = y[correct_ixs]
-            w = w[correct_ixs]
-            self._obs_names = self._obs_names[correct_ixs]
-
-        del adata
 
         self._x_all, self._y_all, self._w_all = (
             _densify_squeeze(x, self._dtype)[:, np.newaxis],
@@ -514,7 +499,8 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
                 f"Values have different shapes: `{self.x.shape[0]}`, `{self.y.shape[0]}`, `{self.w.shape[0]}`."
             )
 
-        self._gene = gene
+        self._gene = signal.name
+        self._signal = signal
         self._lineage = lineage
         self._prepared = True
 
@@ -780,7 +766,7 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
             ),
         )
 
-        if lineage_probability and ylabel in ("expression", self._gene):
+        if lineage_probability and ylabel in ("expression", "value", self._gene):
             ylabel = f"scaled {ylabel}"
 
         vmin, vmax = None, None
@@ -1000,7 +986,7 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
             setattr(dst, attr, copy.copy(getattr(self, attr)))
 
     def _shallowcopy_attributes(self, dst: "BaseModel") -> None:
-        for attr in ["_gene", "_lineage", "_use_raw", "_data_key", "_is_bulk"]:
+        for attr in ["_gene", "_signal", "_lineage", "_use_raw", "_data_key", "_is_bulk"]:
             setattr(dst, attr, copy.copy(getattr(self, attr)))
         # user is not exposed to this
         dst._obs_names = self._obs_names

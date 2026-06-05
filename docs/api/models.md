@@ -20,3 +20,20 @@ and [rpy2](https://rpy2.github.io) installed.
     models.GAMR
     models.SKLearnModel
 ```
+
+## Signals
+
+Signals identify the observation-aligned quantity a model is fit on. Pass them to
+{func}`cellrank.pl.gene_trends` or {meth}`cellrank.models.BaseModel.prepare` to plot gene expression,
+an {attr}`~anndata.AnnData.obs` covariate (e.g. a gene module score), or a column of an
+{attr}`~anndata.AnnData.obsm` array.
+
+```{eval-rst}
+.. autosummary::
+    :toctree: _autosummary/models
+
+    models.Signal
+    models.Gene
+    models.Obs
+    models.Obsm
+```

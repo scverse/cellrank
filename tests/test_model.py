@@ -5,6 +5,7 @@ import pathlib
 import pickle
 
 import numpy as np
+import pandas as pd
 import pytest
 import scipy.stats as st
 from anndata import AnnData
@@ -13,7 +14,7 @@ from sklearn.svm import SVR
 
 from cellrank._utils import Lineage
 from cellrank._utils._key import Key
-from cellrank.models import GAM, GAMR, FittedModel, SKLearnModel
+from cellrank.models import GAM, GAMR, FittedModel, Gene, Obs, Obsm, SKLearnModel
 from cellrank.models._base_model import FailedModel, UnknownModelError
 from cellrank.models._pygam_model import GamDistribution, GamLinkFunction, _gams
 from cellrank.models._utils import (
@@ -829,3 +830,120 @@ class TestFittedModel:
         assert fm.y_all is not m.y_all
         np.testing.assert_array_equal(fm.w_all, m.w_all)
         assert fm.y_all is not m.w_all
+
+
+def _add_signal_data(adata: AnnData) -> AnnData:
+    """Add an obs covariate and obsm arrays (ndarray + DataFrame) used by the signal tests."""
+    import scipy.sparse as sp
+
+    col = adata.X[:, 0]
+    adata.obs["module_score"] = col.toarray().ravel() if sp.issparse(col) else np.asarray(col).ravel()
+    adata.obs["categorical"] = pd.Categorical(["a", "b"] * (adata.n_obs // 2) + ["a"] * (adata.n_obs % 2))
+    block = adata.X[:, :2]
+    adata.obsm["X_emb"] = block.toarray() if sp.issparse(block) else np.asarray(block)
+    adata.obsm["df_emb"] = pd.DataFrame(adata.obsm["X_emb"], columns=["dim1", "dim2"], index=adata.obs_names)
+    return adata
+
+
+class TestSignals:
+    def test_gene_fetches_x(self, adata_cflare):
+        g = adata_cflare.var_names[0]
+        sig = Gene(g)
+        np.testing.assert_array_almost_equal(sig.fetch(adata_cflare), adata_cflare.obs_vector(g))
+        assert sig.name == g
+        assert sig.ylabel == "expression"
+        assert sig.layer is None
+        assert sig.use_raw is False
+
+    def test_gene_fetches_layer(self, adata_cflare):
+        g = adata_cflare.var_names[0]
+        sig = Gene(g, layer="Ms")
+        np.testing.assert_array_almost_equal(sig.fetch(adata_cflare), adata_cflare.obs_vector(g, layer="Ms"))
+        assert sig.layer == "Ms"
+
+    def test_obs_fetches_column(self, adata_cflare):
+        adata = _add_signal_data(adata_cflare)
+        sig = Obs("module_score")
+        np.testing.assert_array_almost_equal(sig.fetch(adata), adata.obs["module_score"].to_numpy())
+        assert sig.name == "module_score"
+        assert sig.ylabel == "value"
+
+    def test_obsm_array_fetches_column(self, adata_cflare):
+        adata = _add_signal_data(adata_cflare)
+        sig = Obsm("X_emb", 1)
+        np.testing.assert_array_almost_equal(sig.fetch(adata), adata.obsm["X_emb"][:, 1])
+        assert sig.name == "X_emb[1]"
+        assert sig.ylabel == "value"
+
+    def test_obsm_dataframe_fetches_column(self, adata_cflare):
+        adata = _add_signal_data(adata_cflare)
+        sig = Obsm("df_emb", "dim2")
+        np.testing.assert_array_almost_equal(sig.fetch(adata), adata.obsm["df_emb"]["dim2"].to_numpy())
+        assert sig.name == "df_emb[dim2]"
+
+    def test_signals_are_hashable(self):
+        assert {Gene("a"), Gene("a"), Obs("a"), Obsm("k", 0)} == {Gene("a"), Obs("a"), Obsm("k", 0)}
+
+    @pytest.mark.parametrize(
+        ("signal", "exc"),
+        [
+            (Gene("not_a_gene"), KeyError),
+            (Gene("g", layer="not_a_layer"), KeyError),
+            (Obs("not_a_col"), KeyError),
+            (Obs("categorical"), TypeError),
+            (Obsm("not_a_key", 0), KeyError),
+            (Obsm("X_emb", 99), IndexError),
+            (Obsm("X_emb", "label"), TypeError),
+        ],
+    )
+    def test_validate_raises(self, adata_cflare, signal, exc):
+        adata = _add_signal_data(adata_cflare)
+        if isinstance(signal, Gene) and signal.gene == "g":
+            signal = Gene(adata.var_names[0], layer="not_a_layer")
+        with pytest.raises(exc):
+            signal.fetch(adata)
+
+
+class TestPrepareSignal:
+    def test_prepare_with_obs_signal(self, adata_cflare):
+        adata = _add_signal_data(adata_cflare)
+        m = create_model(adata).prepare(Obs("module_score"), "0", "latent_time")
+        assert m.prepared
+        assert m._gene == "module_score"
+        assert m.signal == Obs("module_score")
+        assert m._data_key is None
+
+    def test_prepare_with_obsm_signal(self, adata_cflare):
+        adata = _add_signal_data(adata_cflare)
+        m = create_model(adata).prepare(Obsm("X_emb", 1), "0", "latent_time")
+        assert m.prepared
+        assert m._gene == "X_emb[1]"
+
+    def test_prepare_with_gene_layer_signal(self, adata_cflare):
+        g = adata_cflare.var_names[0]
+        m = create_model(adata_cflare).prepare(Gene(g, layer="Ms"), "0", "latent_time")
+        assert m._gene == g
+        assert m._data_key == "Ms"
+
+    def test_bare_string_does_not_warn(self, adata_cflare):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            create_model(adata_cflare).prepare(adata_cflare.var_names[0], "0", "latent_time")
+
+    @pytest.mark.parametrize("kwargs", [{"data_key": "Ms"}, {"use_raw": False}])
+    def test_legacy_data_key_use_raw_warn(self, adata_cflare, kwargs):
+        g = adata_cflare.var_names[0]
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            create_model(adata_cflare).prepare(g, "0", "latent_time", **kwargs)
+
+    def test_legacy_gene_kwarg_warns(self, adata_cflare):
+        g = adata_cflare.var_names[0]
+        with pytest.warns(DeprecationWarning, match="deprecated"):
+            create_model(adata_cflare).prepare(lineage="0", time_key="latent_time", gene=g)
+
+    def test_signal_with_legacy_kwarg_errors(self, adata_cflare):
+        # combining a Signal with data_key is rejected (TypeError, wrapped as a fatal model failure)
+        with pytest.raises(TypeError, match=r"Fatal model"):
+            create_model(adata_cflare).prepare(Gene(adata_cflare.var_names[0]), "0", "latent_time", data_key="Ms")

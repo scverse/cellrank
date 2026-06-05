@@ -2,6 +2,7 @@ import os
 import pathlib
 import shutil
 import tempfile
+import warnings
 from collections.abc import Callable
 from typing import Literal
 
@@ -21,7 +22,7 @@ from cellrank._utils import Lineage
 from cellrank._utils._key import Key
 from cellrank.estimators import CFLARE, GPCCA
 from cellrank.kernels import ConnectivityKernel, PseudotimeKernel, VelocityKernel
-from cellrank.models import GAMR
+from cellrank.models import GAMR, Gene, Obs, Obsm
 from tests._helpers import (
     create_failed_model,
     create_model,
@@ -960,8 +961,15 @@ class TestHeatmapReturns:
 def _run_gene_trends(adata: AnnData, model, genes, **kwargs):
     """Render gene trends and return the :class:`~matplotlib.figure.Figure` for introspection."""
     kwargs.setdefault("time_key", "latent_time")
-    kwargs.setdefault("data_key", "Ms")
-    return cr.pl.gene_trends(adata, model, genes, dpi=DPI, return_figure=True, **kwargs)
+    data_key = kwargs.pop("data_key", "Ms")
+    # exercise the new `Signal` API for the common bare-gene-name case (fit from the `Ms` layer),
+    # falling back to the legacy `data_key` path for raw / gene-symbol cases handled elsewhere
+    gene_list = [genes] if isinstance(genes, str) else genes
+    if not kwargs.get("use_raw", False) and "gene_symbols" not in kwargs and all(isinstance(g, str) for g in gene_list):
+        layer = None if data_key in ("X", None) else data_key
+        signals = [Gene(g, layer=layer) for g in gene_list]
+        return cr.pl.gene_trends(adata, model, signals, dpi=DPI, return_figure=True, **kwargs)
+    return cr.pl.gene_trends(adata, model, genes, dpi=DPI, return_figure=True, data_key=data_key, **kwargs)
 
 
 def _gene_trends_fig(adata: AnnData, **kwargs):
@@ -1267,6 +1275,66 @@ class TestGeneTrend:
         adata, _ = adata_gpcca_fwd
         model, genes, kwargs = setup(adata)
         _assert_drawn(_run_gene_trends(adata, model, genes, **kwargs))
+
+    # --- Signal data paths: plot obs / obsm quantities, not just gene expression ---
+    def _add_signals(self, adata):
+        col = adata.X[:, 0]
+        adata.obs["module_score"] = col.toarray().ravel() if sp.issparse(col) else np.asarray(col).ravel()
+        block = adata.X[:, :2]
+        adata.obsm["X_emb"] = block.toarray() if sp.issparse(block) else np.asarray(block)
+
+    def _signal_trends(self, adata, signals, **kwargs):
+        return cr.pl.gene_trends(
+            adata, create_model(adata), signals, time_key="latent_time", dpi=DPI, return_figure=True, **kwargs
+        )
+
+    def test_trends_obs_signal_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        self._add_signals(adata)
+        # not same_plot: the obs column name is used as the y-label
+        fig = self._signal_trends(adata, Obs("module_score"))
+        _assert_drawn(fig)
+        assert any(ax.get_ylabel() == "module_score" for ax in fig.axes)
+
+    def test_trends_obs_signal_neutral_ylabel(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        self._add_signals(adata)
+        # same_plot uses the signal name as the title, so the y-label is the neutral "value"
+        fig = self._signal_trends(adata, Obs("module_score"), same_plot=True)
+        ylabels = {ax.get_ylabel() for ax in fig.axes}
+        assert "value" in ylabels
+        assert "expression" not in ylabels
+
+    def test_trends_obsm_signal_runs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        self._add_signals(adata)
+        fig = self._signal_trends(adata, Obsm("X_emb", 1))
+        _assert_drawn(fig)
+        assert any(ax.get_ylabel() == "X_emb[1]" for ax in fig.axes)
+
+    def test_trends_mixed_signals_run(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        self._add_signals(adata)
+        fig = self._signal_trends(adata, [adata.var_names[0], Obs("module_score"), Obsm("X_emb", 0)])
+        _assert_drawn(fig)
+        # 3 signals x n_lineages panels
+        assert len(fig.axes) >= 3
+
+    def test_trends_gene_layer_signal_no_warning(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            fig = self._signal_trends(adata, Gene(adata.var_names[0], layer="Ms"))
+        _assert_drawn(fig)
+
+    def test_trends_deprecated_genes_and_data_key_warn(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        with pytest.warns(DeprecationWarning, match="`genes` will be deprecated"):
+            cr.pl.gene_trends(adata, create_model(adata), genes=GENES[0], time_key="latent_time", return_figure=True)
+        with pytest.warns(DeprecationWarning, match="`data_key`/`use_raw` will be deprecated"):
+            cr.pl.gene_trends(
+                adata, create_model(adata), GENES[0], time_key="latent_time", data_key="Ms", return_figure=True
+            )
 
     # --- behavior / error contracts ---
     def test_invalid_time_key(self, adata_cflare: AnnData):
