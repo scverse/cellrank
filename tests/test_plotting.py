@@ -2212,66 +2212,29 @@ class TestPlotDriverCorrelation:
         plt.close("all")
 
 
+def _log_odds_ax(adata, lin0="0", lin1="1", **kw):
+    """Render a log-odds plot with show=False and return its Axes (single key) or Axes array."""
+    kw.setdefault("figsize", (4, 3))
+    kw.setdefault("size", 10)
+    kw.setdefault("seed", 42)
+    return cr.pl.log_odds(adata, lin0, lin1, "age(days)", dpi=DPI, show=False, **kw)
+
+
+def _first_ax(res):
+    return res.flat[0] if isinstance(res, np.ndarray) else res
+
+
+def _log_odds_scatter(res):
+    return [c for c in _first_ax(res).collections if type(c).__name__ == "PathCollection"]
+
+
 class TestLogOdds:
-    @compare(tol=250)
+    # --- visual regression: lineage swarm + a categorical-key variant ---
+    @compare(tol=STRICT_TOL)
     def test_log_odds(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
+        cr.pl.log_odds(adata, "0", "1", "age(days)", dpi=DPI, save=fpath, figsize=(4, 3), size=10, seed=42)
 
-    @compare(kind="bwd", tol=250)
-    def test_log_odds_bwd(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            backward=True,
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
-
-    @compare()
-    def test_log_odds_rest(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "2",
-            None,
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
-
-    @compare()
-    def test_log_odds_continuous_keys(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.var_names[:3],
-            figsize=(4, 3),
-            size=4,
-            seed=42,
-        )
-
-    @compare()
+    @compare(tol=STRICT_TOL)
     def test_log_odds_categorical_keys(self, adata: AnnData, fpath: str):
         cr.pl.log_odds(
             adata,
@@ -2286,266 +2249,86 @@ class TestLogOdds:
             seed=42,
         )
 
-    @compare()
-    def test_log_odds_threshold(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.var_names[:3],
-            threshold=0.5,
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
+    # --- parameter plumbing: assert on the returned Axes, not on pixels ---
+    def test_log_odds_size(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        small = {
+            float(s) for c in _log_odds_scatter(_log_odds_ax(adata, keys="clusters", size=5)) for s in c.get_sizes()
+        }
+        big = {
+            float(s) for c in _log_odds_scatter(_log_odds_ax(adata, keys="clusters", size=20)) for s in c.get_sizes()
+        }
+        assert max(big) > max(small)
 
-    @compare()
-    def test_log_odds_multiple_threshold(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.var_names[:3],
-            threshold=[0.7, 0.2, 0.3],
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
+    def test_log_odds_alpha(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        assert 0.5 in {c.get_alpha() for c in _log_odds_scatter(_log_odds_ax(adata, keys="clusters", alpha=0.5))}
 
-    @compare()
-    def test_log_odds_threshold_color(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.var_names[:3],
-            threshold=0.5,
-            threshold_color="blue",
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
+    def test_log_odds_threshold_color(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        ax = _first_ax(_log_odds_ax(adata, keys=adata.var_names[:3], threshold=0.5, threshold_color="blue"))
+        assert any(mcolors.to_hex(ln.get_color()) == mcolors.to_hex("blue") for ln in ax.get_lines())
 
-    @compare()
-    def test_log_odds_layer(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.var_names[3:6],
-            layer="Ms",
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
+    def test_log_odds_edge_kwargs(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        scatter = _log_odds_scatter(_log_odds_ax(adata, keys="clusters", edgecolor="red", linewidth=5))
+        assert scatter
+        assert max(float(w) for c in scatter for w in c.get_linewidths()) == 5
+        assert any(mcolors.to_hex(e) == mcolors.to_hex("red") for c in scatter for e in c.get_edgecolor())
 
-    @compare()
-    def test_log_odds_use_raw(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.raw.var_names[3:6],
-            use_raw=True,
-            figsize=(4, 3),
-            size=10,
-            seed=42,
-        )
+    def test_log_odds_legend_loc(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        res = _log_odds_ax(adata, keys=["clusters", adata.var_names[-1]], legend_loc="upper right out")
+        assert _has_legend(_first_ax(res).figure)
 
-    @compare()
-    def test_log_odds_size(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys="clusters",
-            size=20,
-            figsize=(4, 3),
-            seed=42,
-        )
-
-    @compare()
-    def test_log_odds_cmap(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=adata.var_names[:2],
-            size=10,
-            cmap="inferno",
-            figsize=(4, 3),
-            seed=43,
-        )
-
-    @compare()
-    def test_log_odds_alpha(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys="clusters",
-            alpha=0.5,
-            figsize=(4, 3),
-            size=10,
-            seed=0,
-        )
-
-    @compare()
-    def test_log_odds_ncols(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=["clusters", adata.var_names[-1]],
-            ncols=1,
-            figsize=(3, 4),
-            size=10,
-            seed=2,
-        )
-
-    @compare()
-    def test_log_odds_fontsize(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys="clusters",
-            fontsize=25,
-            figsize=(3, 4),
-            size=10,
-            seed=1,
-        )
-
-    @compare()
-    def test_log_odds_xticks_steps_size(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys="clusters",
-            xticks_step_size=None,
-            figsize=(3, 4),
-            size=10,
-            seed=3,
-        )
-
-    @compare()
-    def test_log_odds_legend_loc(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            keys=["clusters", adata.var_names[-1]],
-            legend_loc="upper right out",
-            figsize=(4, 3),
-            size=10,
-            seed=5,
-        )
-
-    @compare(tol=250)
-    def test_log_odds_jitter(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "0",
-            "1",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            figsize=(4, 3),
-            size=10,
-            seed=0,
-            jitter=1,
-        )
-
-    @compare()
-    def test_log_odds_kwargs_return_ax(self, adata: AnnData, fpath: str):
-        ax = cr.pl.log_odds(
-            adata,
-            "1",
-            "2",
-            "age(days)",
-            keys="clusters",
-            dpi=DPI,
-            save=fpath,
-            show=False,
-            edgecolor="red",
-            figsize=(4, 3),
-            size=4,
-            seed=11,
-        )
+    # --- return contracts ---
+    def test_log_odds_return_ax(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        ax = _log_odds_ax(adata, "1", "2", keys="clusters", size=4, seed=11, edgecolor="red")
         assert isinstance(ax, plt.Axes)
 
-    @compare()
-    def test_log_odds_kwargs_return_axes(self, adata: AnnData, fpath: str):
-        axes = cr.pl.log_odds(
-            adata,
-            "1",
-            "2",
-            "age(days)",
-            keys=adata.var_names[:3],
-            dpi=DPI,
-            save=fpath,
-            ncols=2,
-            show=False,
-            figsize=(4, 3),
-            size=4,
-            seed=12,
-        )
+    def test_log_odds_return_axes(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        axes = _log_odds_ax(adata, "1", "2", keys=adata.var_names[:3], ncols=2, size=4, seed=12)
         assert isinstance(axes, np.ndarray)
         assert axes.shape == (3,)
-        assert np.all([isinstance(ax, plt.Axes) for ax in axes])
+        assert all(isinstance(ax, plt.Axes) for ax in axes)
 
-    @compare()
-    def test_log_odds_kwargs(self, adata: AnnData, fpath: str):
-        cr.pl.log_odds(
-            adata,
-            "1",
-            "2",
-            "age(days)",
-            dpi=DPI,
-            save=fpath,
-            linewidth=5,
-            edgecolor="red",
-            figsize=(4, 3),
-            size=4,
-            seed=13,
-        )
+    # --- behaviour coverage: assert the call runs and draws content ---
+    # `cmap` is here, not in introspection: under the default colouring it does not recolour the
+    # log-odds scatter (the points stay on the lineage colourmap), so there is nothing to assert.
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda a: _log_odds_ax(a, "2", None), id="rest"),
+            pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[:3], size=4), id="continuous_keys"),
+            pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[:3], threshold=0.5), id="threshold"),
+            pytest.param(
+                lambda a: _log_odds_ax(a, keys=a.var_names[:3], threshold=[0.7, 0.2, 0.3]), id="multiple_threshold"
+            ),
+            pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[3:6], layer="Ms"), id="layer"),
+            pytest.param(lambda a: _log_odds_ax(a, keys=a.raw.var_names[3:6], use_raw=True), id="use_raw"),
+            pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[:2], cmap="inferno", seed=43), id="cmap"),
+            pytest.param(
+                lambda a: _log_odds_ax(a, keys="clusters", fontsize=25, figsize=(3, 4), seed=1), id="fontsize"
+            ),
+            pytest.param(
+                lambda a: _log_odds_ax(a, keys="clusters", xticks_step_size=None, figsize=(3, 4), seed=3), id="xticks"
+            ),
+            pytest.param(lambda a: _log_odds_ax(a, jitter=1, seed=0), id="jitter"),
+            pytest.param(
+                lambda a: _log_odds_ax(a, keys=["clusters", a.var_names[-1]], ncols=1, figsize=(3, 4), seed=2),
+                id="ncols",
+            ),
+        ],
+    )
+    def test_log_odds_runs(self, adata_gpcca_fwd, call):
+        adata, _ = adata_gpcca_fwd
+        _assert_drawn(_first_ax(call(adata)).figure)
+
+    def test_log_odds_bwd_runs(self, adata_gpcca_bwd):
+        adata, _ = adata_gpcca_bwd
+        _assert_drawn(_first_ax(_log_odds_ax(adata, backward=True)).figure)
 
 
 def _msc_obsm(g):
