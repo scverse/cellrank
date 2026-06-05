@@ -832,17 +832,27 @@ class TestHeatmapReturns:
 
 
 def _run_gene_trends(adata: AnnData, model, genes, **kwargs):
-    """Render gene trends and return the :class:`~matplotlib.figure.Figure` for introspection."""
+    """Render gene trends and return the :class:`~matplotlib.figure.Figure` for introspection.
+
+    Encodes the data source in the new `Signal` API (no deprecated `data_key`/`use_raw`): bare
+    gene names become `Gene` signals fitting from the `Ms` layer (or `.raw` for ``use_raw``).
+    `gene_symbols` is not expressible as a `Signal`, so those names are passed through and fit
+    from `.X`. A non-string `genes` (e.g. a failed-model dict's gene list) is passed as-is.
+    """
     kwargs.setdefault("time_key", "latent_time")
     data_key = kwargs.pop("data_key", "Ms")
-    # exercise the new `Signal` API for the common bare-gene-name case (fit from the `Ms` layer),
-    # falling back to the legacy `data_key` path for raw / gene-symbol cases handled elsewhere
+    use_raw = kwargs.pop("use_raw", False)
     gene_list = [genes] if isinstance(genes, str) else genes
-    if not kwargs.get("use_raw", False) and "gene_symbols" not in kwargs and all(isinstance(g, str) for g in gene_list):
-        layer = None if data_key in ("X", None) else data_key
-        signals = [Gene(g, layer=layer) for g in gene_list]
+    if kwargs.get("gene_symbols") is None and all(isinstance(g, str) for g in gene_list):
+        layer = None if (use_raw or data_key in ("X", None)) else data_key
+        signals = [Gene(g, layer=layer, use_raw=use_raw) for g in gene_list]
         return cr.pl.gene_trends(adata, model, signals, dpi=DPI, return_figure=True, **kwargs)
-    return cr.pl.gene_trends(adata, model, genes, dpi=DPI, return_figure=True, data_key=data_key, **kwargs)
+    return cr.pl.gene_trends(adata, model, genes, dpi=DPI, return_figure=True, **kwargs)
+
+
+def _ms_signals(genes):
+    """Wrap gene names as `Gene` signals fitting from the `Ms` layer (the non-deprecated form of `data_key='Ms'`)."""
+    return [Gene(g, layer="Ms") for g in genes]
 
 
 def _gene_trends_fig(adata: AnnData, **kwargs):
@@ -922,27 +932,27 @@ class TestGeneTrend:
     @compare(tol=STRICT_TOL)
     def test_trends(self, adata: AnnData, fpath: str):
         model = create_model(adata)
-        cr.pl.gene_trends(adata, model, GENES[:3], time_key="latent_time", data_key="Ms", dpi=DPI, save=fpath)
+        cr.pl.gene_trends(adata, model, _ms_signals(GENES[:3]), time_key="latent_time", dpi=DPI, save=fpath)
 
     @compare(kind="bwd", tol=STRICT_TOL)
     def test_trends_bwd(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
-            adata, model, GENES[:3], time_key="latent_time", backward=True, data_key="Ms", dpi=DPI, save=fpath
+            adata, model, _ms_signals(GENES[:3]), time_key="latent_time", backward=True, dpi=DPI, save=fpath
         )
 
     @compare(tol=STRICT_TOL)
     def test_trends_same_plot(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
-            adata, model, GENES[:3], time_key="latent_time", data_key="Ms", same_plot=True, dpi=DPI, save=fpath
+            adata, model, _ms_signals(GENES[:3]), time_key="latent_time", same_plot=True, dpi=DPI, save=fpath
         )
 
     @compare(tol=STRICT_TOL)
     def test_transpose(self, adata: AnnData, fpath: str):
         model = create_model(adata)
         cr.pl.gene_trends(
-            adata, model, GENES[:4], transpose=True, data_key="Ms", time_key="latent_time", dpi=DPI, save=fpath
+            adata, model, _ms_signals(GENES[:4]), transpose=True, time_key="latent_time", dpi=DPI, save=fpath
         )
 
     @compare(tol=STRICT_TOL)
@@ -951,10 +961,9 @@ class TestGeneTrend:
         cr.pl.gene_trends(
             adata,
             model,
-            GENES[:5],
+            _ms_signals(GENES[:5]),
             time_key="latent_time",
             transpose=True,
-            data_key="Ms",
             same_plot=True,
             plot_kwargs={"lineage_probability": True},
             dpi=DPI,
@@ -967,9 +976,8 @@ class TestGeneTrend:
         cr.pl.gene_trends(
             adata,
             {GENES[0]: fm, "*": fm.model},
-            GENES[:3],
+            _ms_signals(GENES[:3]),
             figsize=(5, 5),
-            data_key="Ms",
             time_key="latent_time",
             dpi=DPI,
             save=fpath,
@@ -1218,7 +1226,7 @@ class TestGeneTrend:
     def test_invalid_time_key(self, adata_cflare: AnnData):
         model = create_model(adata_cflare)
         with pytest.raises(KeyError, match=r"Fatal model"):
-            cr.pl.gene_trends(adata_cflare, model, GENES[:10], data_key="Ms", same_plot=False, time_key="foobar")
+            cr.pl.gene_trends(adata_cflare, model, _ms_signals(GENES[:10]), same_plot=False, time_key="foobar")
 
     def test_all_models_failed(self, adata_cflare: AnnData):
         fm = create_failed_model(adata_cflare)
@@ -1226,8 +1234,7 @@ class TestGeneTrend:
             cr.pl.gene_trends(
                 adata_cflare,
                 fm,
-                GENES[:10],
-                data_key="Ms",
+                _ms_signals(GENES[:10]),
                 mode="lineages",
                 time_key="latent_time",
                 dpi=DPI,
@@ -1238,8 +1245,7 @@ class TestGeneTrend:
         models = cr.pl.gene_trends(
             adata_cflare,
             model,
-            GENES[:10],
-            data_key="Ms",
+            _ms_signals(GENES[:10]),
             lineages=["0", "1"],
             time_key="latent_time",
             dpi=DPI,
@@ -1256,8 +1262,7 @@ class TestGeneTrend:
         models = cr.pl.gene_trends(
             adata_cflare,
             model,
-            GENES[:5],
-            data_key="Ms",
+            _ms_signals(GENES[:5]),
             lineages=["0", "1"],
             time_key="latent_time",
             dpi=DPI,
@@ -1268,8 +1273,7 @@ class TestGeneTrend:
         reused = cr.pl.gene_trends(
             adata_cflare,
             models,
-            GENES[:5],
-            data_key="Ms",
+            _ms_signals(GENES[:5]),
             lineages=["0", "1"],
             time_key="latent_time",
             dpi=DPI,
@@ -1519,10 +1523,10 @@ def _model_fig(adata, gene=None, lineage="1", *, ci=True, prepare_kwargs=None, *
     return model.plot(dpi=DPI, return_fig=True, **plot_kwargs)
 
 
-def _model_obs_data_key(adata):
+def _model_obs_signal(adata):
     gene = adata.X[:, 0]
     adata.obs["foo"] = gene.toarray() if sp.issparse(gene) else gene
-    return _model_fig(adata, gene="foo", prepare_kwargs={"data_key": "obs"})
+    return _model_fig(adata, gene=Obs("foo"))
 
 
 def _model_one_lineage(adata):
@@ -1606,7 +1610,7 @@ class TestModel:
     @pytest.mark.parametrize(
         "setup",
         [
-            pytest.param(_model_obs_data_key, id="obs_data_key"),
+            pytest.param(_model_obs_signal, id="obs_signal"),
             pytest.param(_model_one_lineage, id="one_lineage"),
             pytest.param(lambda a: _model_fig(a, lineage=None), id="no_lineage"),
             pytest.param(lambda a: _model_fig(a, loc=None), id="no_legend"),
@@ -1664,11 +1668,10 @@ class TestGAMR:
         fig = cr.pl.gene_trends(
             gamr_model.adata,
             gamr_model,
-            GENES[:3],
+            _ms_signals(GENES[:3]),
             time_key="latent_time",
             conf_int=conf_int,
             backward=False,
-            data_key="Ms",
             dpi=DPI,
             return_figure=True,
         )
@@ -1777,9 +1780,8 @@ class TestFittedModel:
         cr.pl.gene_trends(
             adata,
             {GENES[0]: fm1, GENES[1]: fm2},
-            GENES[:2],
+            _ms_signals(GENES[:2]),
             time_key="latent_time",
-            data_key="Ms",
             dpi=DPI,
             save=fpath,
         )
