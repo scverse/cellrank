@@ -884,7 +884,7 @@ def _maybe_create_dir(dirpath: str | os.PathLike) -> None:
             os.makedirs(dirpath, exist_ok=True)
 
 
-def save_fig(fig, path: str | os.PathLike, make_dir: bool = True, ext: str = "png") -> None:
+def save_fig(fig, path: str | os.PathLike, make_dir: bool = True, ext: str = "png", dpi: float | None = None) -> None:
     """Save a plot.
 
     Parameters
@@ -897,6 +897,10 @@ def save_fig(fig, path: str | os.PathLike, make_dir: bool = True, ext: str = "pn
         Whether to try making the directory if it does not exist.
     ext
         Extension to use.
+    dpi
+        Resolution in dots per inch. If :obj:`None`, the figure's own dpi is used. Pass this for
+        figures created by ``sc.pl.embedding`` and friends, which build the figure at scanpy's
+        default dpi and ignore a requested ``dpi`` -- the size is only honored here, at save time.
 
     Returns
     -------
@@ -915,7 +919,7 @@ def save_fig(fig, path: str | os.PathLike, make_dir: bool = True, ext: str = "pn
 
     logger.debug("Saving figure to %r", path)
 
-    fig.savefig(path, bbox_inches="tight", transparent=True)
+    fig.savefig(path, bbox_inches="tight", transparent=True, dpi=dpi)
 
 
 def _convert_to_categorical_series(

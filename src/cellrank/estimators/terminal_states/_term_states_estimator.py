@@ -517,7 +517,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
         if kwargs.get("legend_loc") == "right":
             kwargs["legend_loc"] = "right margin"
         kwargs.pop("color_map", None)
-        kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
+        # `sc.pl.embedding` ignores `dpi`; forward it to `save_fig`, which honors it at save time.
+        dpi = kwargs.pop("dpi", None)
         save = kwargs.pop("save", None)
         show = kwargs.pop("show", None)
         kwargs["cmap"] = cmap
@@ -573,7 +574,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                         ax.set_title(ax_title)
 
         if save is not None:
-            save_fig(plt.gcf(), save)
+            save_fig(plt.gcf(), save, dpi=dpi)
         if show is True or (show is None and save is None):
             plt.show()
         # fmt: on
@@ -661,7 +662,8 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                 _plot_color_gradients(self.adata, _data, basis=basis, title=title,
                                       save=save, show=show, **kwargs)
             else:
-                kwargs.pop("dpi", None)  # handled at figure level, not by sc.pl.embedding
+                # `sc.pl.embedding` ignores `dpi`; forward it to `save_fig`, which honors it at save time.
+                dpi = kwargs.pop("dpi", None)
                 title = [f"{_title} {state}" for state in states] if title is None else title
                 if isinstance(title, str):
                     title = [title]
@@ -675,7 +677,7 @@ class TermStatesEstimator(BaseEstimator, abc.ABC):
                         title=title, cmap=cmap, show=False, **kwargs,
                     )
                 if save is not None:
-                    save_fig(plt.gcf(), save)
+                    save_fig(plt.gcf(), save, dpi=dpi)
                 if show is True or (show is None and save is None):
                     plt.show()
         else:

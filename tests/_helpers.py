@@ -154,27 +154,62 @@ def flatten_onto_white(image_path: str | pathlib.Path) -> None:
     Image.alpha_composite(background, image).convert("RGB").save(image_path)
 
 
-def resize_images_to_same_sizes(
+# Relative size tolerance for image comparisons. Sub-pixel `bbox_inches="tight"` rounding drifts
+# the rendered pixel size by a few px across platforms (Linux CI baseline vs local dev) and
+# matplotlib versions; anything beyond this is a gross layout/DPI/backend divergence we want to
+# surface rather than absorb. This is the size-axis analogue of the RMS `STRICT_TOL`.
+SIZE_RTOL = 0.1
+
+
+def assert_image_sizes_close(
     expected_image_path: str | pathlib.Path,
     actual_image_path: str | pathlib.Path,
-    kind: str = "actual_to_expected",
+    *,
+    rtol: float = SIZE_RTOL,
 ) -> None:
+    """Fail when the rendered image grossly diverges in pixel size from the committed baseline.
+
+    Replaces the old bilinear-resize fallback, which silently squashed the rendered image to the
+    baseline size before comparison -- that both masked real regressions (a genuinely different
+    layout squashed to match) and manufactured fake diffs (interpolation blurs the image before the
+    RMS comparison). We instead fail loudly on a gross size mismatch and otherwise leave the pixels
+    untouched; small cross-platform / matplotlib-version drift in the ``bbox_inches="tight"`` crop
+    is absorbed by ``rtol`` and the caller compares on the common (cropped, non-interpolated)
+    region.
+    """
     if not os.path.isfile(actual_image_path):
         raise OSError(f"Actual image path `{actual_image_path!r}` does not exist.")
     if not os.path.isfile(expected_image_path):
         raise OSError(f"Expected image path `{expected_image_path!r}` does not exist.")
-    expected_image = Image.open(expected_image_path)
-    actual_image = Image.open(actual_image_path)
-    if expected_image.size != actual_image.size:
-        if kind == "actual_to_expected":
-            actual_image.resize(expected_image.size).save(actual_image_path)
-        elif kind == "expected_to_actual":
-            expected_image.resize(actual_image.size).save(expected_image)
-        else:
-            raise ValueError(
-                f"Invalid kind of conversion `{kind!r}`."
-                f"Valid options are `'actual_to_expected'`, `'expected_to_actual'`."
-            )
+    (ew, eh), (aw, ah) = Image.open(expected_image_path).size, Image.open(actual_image_path).size
+    ratio = max(aw / ew, ew / aw, ah / eh, eh / ah)
+    assert ratio <= 1 + rtol, (
+        f"Rendered image size {(aw, ah)} diverges from baseline size {(ew, eh)} by "
+        f"{(ratio - 1) * 100:.0f}% (> {rtol * 100:.0f}% tolerance) "
+        f"(`{actual_image_path}` vs `{expected_image_path}`). This signals a change in "
+        f"matplotlib, layout, DPI, or backend; fix the root cause or regenerate the baseline."
+    )
+
+
+def crop_images_to_common_size(
+    image_path_a: str | pathlib.Path,
+    image_path_b: str | pathlib.Path,
+) -> None:
+    """Crop both images in place to their common (minimum) size, top-left aligned.
+
+    :func:`matplotlib.testing.compare.compare_images` requires identical dimensions. Unlike the old
+    resize, cropping does not interpolate, so it neither blurs the image nor manufactures diffs; a
+    genuine layout change still shows up in the overlapping region's RMS. Only meaningful once the
+    sizes are already known to be close (see :func:`assert_image_sizes_close`).
+    """
+    image_a, image_b = Image.open(image_path_a), Image.open(image_path_b)
+    width = min(image_a.width, image_b.width)
+    height = min(image_a.height, image_b.height)
+    box = (0, 0, width, height)
+    if image_a.size != (width, height):
+        image_a.crop(box).save(image_path_a)
+    if image_b.size != (width, height):
+        image_b.crop(box).save(image_path_b)
 
 
 def assert_array_nan_equal(actual: np.ndarray | pd.Series, expected: np.ndarray | pd.Series) -> None:
