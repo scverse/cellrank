@@ -776,6 +776,12 @@ class TestHeatmap:
         off = _run_heatmap(adata, mode="genes", cbar=False)
         assert len(off.axes) < len(on.axes)
 
+    def test_heatmap_fate_probabilities(self, adata_gpcca_fwd):
+        adata, _ = adata_gpcca_fwd
+        base = _run_heatmap(adata, mode="genes")
+        with_fate = _run_heatmap(adata, mode="genes", show_fate_probabilities=True)
+        assert len(with_fate.axes) > len(base.axes)
+
     # --- behaviour coverage: assert the call runs and produces figure(s) ---
     @pytest.mark.parametrize(
         ("genes", "kwargs"),
@@ -786,7 +792,6 @@ class TestHeatmap:
             pytest.param(None, {"mode": "lineages", "time_range": (0.2, 0.5)}, id="time_range"),
             pytest.param(None, {"mode": "lineages", "cbar": False}, id="no_cbar_lineages"),
             pytest.param(None, {"mode": "lineages", "show_fate_probabilities": True}, id="fate_probs_lineages"),
-            pytest.param(None, {"mode": "genes", "show_fate_probabilities": True}, id="fate_probs_genes"),
             pytest.param(None, {"mode": "lineages", "n_convolve": None}, id="no_convolve"),
             pytest.param(None, {"mode": "lineages", "scale": False}, id="no_scale_lineages"),
             pytest.param(None, {"mode": "genes", "scale": False}, id="no_scale_genes"),
@@ -1029,6 +1034,11 @@ def _any_cmap(fig, name: str) -> bool:
         if any(hasattr(c, "get_cmap") and c.get_cmap().name == name for c in ax.collections):
             return True
     return False
+
+
+def _n_scatter_points(fig) -> int:
+    """Total number of scattered points across a figure (e.g. plotted eigenvalues in a spectrum)."""
+    return sum(len(c.get_offsets()) for ax in fig.axes for c in ax.collections if type(c).__name__ == "PathCollection")
 
 
 class TestGeneTrend:
@@ -1388,6 +1398,12 @@ class TestCFLARE:
         fig = _estimator_fig(mc, "plot_spectrum", title="foobar", real_only=False)
         assert _any_title(fig, "foobar")
 
+    @pytest.mark.parametrize("real_only", [True, False], ids=["real", "complex"])
+    def test_mc_spectrum_n_evals(self, adata_cflare_fwd, real_only):
+        _, mc = adata_cflare_fwd
+        fig = _estimator_fig(mc, "plot_spectrum", n=2, real_only=real_only)
+        assert _n_scatter_points(fig) == 2
+
     # --- behaviour coverage: assert the call runs and produces a figure ---
     @pytest.mark.parametrize(
         ("method", "kwargs"),
@@ -1396,8 +1412,6 @@ class TestCFLARE:
             pytest.param("plot_spectrum", {"real_only": True, "show_eigengap": False}, id="spectrum_no_eigengap"),
             pytest.param("plot_spectrum", {"marker": "X"}, id="spectrum_marker"),
             pytest.param("plot_spectrum", {"linewidths": 20}, id="spectrum_linewidths"),
-            pytest.param("plot_spectrum", {"n": 2, "real_only": True}, id="spectrum_evals"),
-            pytest.param("plot_spectrum", {"n": 2, "real_only": False}, id="spectrum_evals_complex"),
             pytest.param("plot_macrostates", {"which": "terminal", "color": "clusters"}, id="final_states_clusters"),
             pytest.param("plot_fate_probabilities", {"color": "clusters"}, id="lin_probs_clusters"),
             pytest.param("plot_fate_probabilities", {"cmap": cm.inferno}, id="lin_probs_cmap"),
@@ -1504,13 +1518,17 @@ class TestGPCCA:
         without_cbar = _estimator_fig(g, "plot_coarse_T", show_cbar=False)
         assert len(with_cbar.axes) == len(without_cbar.axes) + 1
 
+    @pytest.mark.parametrize("real_only", [True, False], ids=["real", "complex"])
+    def test_gpcca_spectrum_n_evals(self, adata_gpcca_fwd, real_only):
+        _, g = adata_gpcca_fwd
+        fig = _estimator_fig(g, "plot_spectrum", n=2, real_only=real_only)
+        assert _n_scatter_points(fig) == 2
+
     # --- behavior coverage: assert the call runs and produces a figure ---
     @pytest.mark.parametrize(
         ("method", "kwargs"),
         [
             pytest.param("plot_spectrum", {"real_only": True, "show_eigengap": False}, id="spectrum_no_eigengap"),
-            pytest.param("plot_spectrum", {"n": 2, "real_only": True}, id="spectrum_evals"),
-            pytest.param("plot_spectrum", {"n": 2, "real_only": False}, id="spectrum_evals_complex"),
             pytest.param(
                 "plot_coarse_T", {"show_initial_dist": False, "show_stationary_dist": True}, id="coarse_T_stat"
             ),
