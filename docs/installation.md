@@ -26,12 +26,42 @@ pip install "cellrank[moscot]"  # moscot for optimal transport (RealTimeKernel)
 pip install "cellrank[plot]"    # additional plotting dependencies
 ```
 
+### PETSc and SLEPc (faster large-scale solvers)
+
+For large datasets, CellRank uses [PETSc] and [SLEPc] (via [pyGPCCA]) to compute
+macrostates and fate probabilities faster and with less memory than the default
+[SciPy]-based eigensolver. Install them together with CellRank via the `petsc`
+extra:
+
+```bash
+pip install "cellrank[petsc]"
+```
+
+`petsc4py` and `slepc4py` ship no pre-built wheels, so pip compiles PETSc and
+SLEPc from source. CellRank only needs a serial build, which requires a **C
+compiler** — no Fortran or MPI. On systems without a Fortran compiler or system
+MPI (e.g. a stock macOS or minimal Linux), pass configuration options so the
+build stays C-only:
+
+```bash
+PETSC_CONFIGURE_OPTIONS="--with-fc=0 --with-mpi=0 --with-debugging=0 --with-shared-libraries=1" \
+    pip install "cellrank[petsc]"
+```
+
+Do **not** set `SLEPC_CONFIGURE_OPTIONS` — SLEPc inherits its configuration from
+the PETSc build. The build is a one-time compilation (a few minutes) and is then
+cached. If you would rather not compile from source, install PETSc and SLEPc via
+conda instead (see below). If you specifically need a distributed **MPI** build,
+install a system MPI and add `mpi4py` alongside the extra.
+
 ## conda / mamba / pixi
 
 CellRank is available on [conda-forge](https://anaconda.org/conda-forge/cellrank).
-This installation method is recommended if you need [PETSc] and [SLEPc],
-libraries for large-scale linear algebra that CellRank uses when computing
-macrostates or fate probabilities on large datasets:
+This installation method is convenient if you want **pre-built** [PETSc] and
+[SLEPc] — libraries for large-scale linear algebra that CellRank uses when
+computing macrostates or fate probabilities on large datasets — without
+compiling them from source (see the pip instructions above for the
+compile-from-source alternative):
 
 ```bash
 mamba install -c conda-forge cellrank
@@ -43,7 +73,7 @@ Or, using [pixi](https://pixi.sh/), a fast, modern conda replacement:
 pixi add cellrank
 ```
 
-To also install PETSc and SLEPc (conda-only packages):
+To also install PETSc and SLEPc as pre-built conda packages (no compilation):
 
 ```bash
 mamba install -c conda-forge cellrank petsc4py slepc4py
@@ -76,5 +106,6 @@ See {doc}`contributing` for setting up a full development environment.
 [issue]: https://github.com/theislab/cellrank/issues/new
 [PETSc]: https://petsc.org/
 [SLEPc]: https://slepc.upv.es/
+[pyGPCCA]: https://pygpcca.readthedocs.io/
 [SciPy]: https://scipy.org/
 [WSL]: https://learn.microsoft.com/windows/wsl/install

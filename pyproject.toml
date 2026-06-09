@@ -64,7 +64,12 @@ dependencies = [
 ]
 optional-dependencies.jax = [ "jax", "jaxlib" ]
 optional-dependencies.moscot = [ "moscot" ]
-optional-dependencies.petsc = [ "mpi4py", "petsc4py", "slepc4py" ]
+# petsc4py/slepc4py give pyGPCCA its fast `method='krylov'` solver for
+# macrostates and fate probabilities. mpi4py is intentionally omitted: pyGPCCA
+# runs serially, and requiring mpi4py forces a system-MPI build that breaks
+# `pip install cellrank[petsc]` on machines without MPI. See docs/installation.md
+# for installing a distributed MPI build.
+optional-dependencies.petsc = [ "petsc4py", "slepc4py" ]
 optional-dependencies.plot = [ "adjusttext" ]
 optional-dependencies.r = [ "rpy2>=3.3" ]
 optional-dependencies.scvelo = [ "scvelo>=0.3" ]
