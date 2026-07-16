@@ -300,7 +300,7 @@ def _mat_mat_corr_sparse(
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        return (X @ Y - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
+        return (X @ Y - (n * X_bar * y_bar)) / (n * X_std * y_std)
 
 
 def _mat_mat_corr_dense(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
@@ -316,7 +316,7 @@ def _mat_mat_corr_dense(X: np.ndarray, Y: np.ndarray) -> np.ndarray:
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        return (X @ Y - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
+        return (X @ Y - (n * X_bar * y_bar)) / (n * X_std * y_std)
 
 
 def _mat_mat_corr_dense_omit_nan(X: np.ndarray, Y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -361,7 +361,7 @@ def _mat_mat_corr_dense_omit_nan(X: np.ndarray, Y: np.ndarray) -> tuple[np.ndarr
         y_bar = sum_y / n
         X_std = np.sqrt(sum_xx / n - X_bar**2)
         y_std = np.sqrt(sum_yy / n - y_bar**2)
-        corr = (sum_xy - (n * X_bar * y_bar)) / ((n - 1) * X_std * y_std)
+        corr = (sum_xy - (n * X_bar * y_bar)) / (n * X_std * y_std)
 
     return corr, n
 

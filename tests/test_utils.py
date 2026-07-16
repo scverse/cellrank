@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import scanpy as sc
 import scipy.sparse as sp
+import scipy.stats as st
 from anndata import AnnData
 from anndata.utils import make_index_unique
 
@@ -20,6 +21,9 @@ from cellrank._utils._utils import (
     _gene_symbols_ctx,
     _irreducible,
     _map_names_and_colors_from_proportions,
+    _mat_mat_corr_dense,
+    _mat_mat_corr_dense_omit_nan,
+    _mat_mat_corr_sparse,
     _merge_categorical_series,
     _one_hot,
     _partition,
@@ -43,6 +47,61 @@ from cellrank.pl._utils import (
     _default_model_callback,
 )
 from tests._helpers import assert_array_nan_equal, create_model, jax_not_installed_skip
+
+
+class TestMatMatCorr:
+    @pytest.mark.parametrize("sparse", [False, True], ids=["dense", "sparse"])
+    def test_matches_pearsonr(self, sparse: bool):
+        X = np.array(
+            [
+                [0.0, 1.0, 2.0, 4.0, 8.0],
+                [5.0, 2.0, 7.0, 1.0, 3.0],
+            ]
+        )
+        Y = np.array(
+            [
+                [1.0, 5.0],
+                [3.0, 4.0],
+                [2.0, 3.0],
+                [5.0, 2.0],
+                [4.0, 0.0],
+            ]
+        )
+        expected = np.array([[st.pearsonr(x, y).statistic for y in Y.T] for x in X])
+
+        actual = _mat_mat_corr_sparse(sp.csr_matrix(X), Y) if sparse else _mat_mat_corr_dense(X, Y)
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+    def test_omit_nan_matches_pairwise_pearsonr(self):
+        X = np.array(
+            [
+                [0.0, 1.0, np.nan, 4.0, 8.0, 2.0],
+                [5.0, np.nan, 7.0, 1.0, 3.0, 6.0],
+            ]
+        )
+        Y = np.array(
+            [
+                [1.0, 5.0],
+                [3.0, np.nan],
+                [2.0, 3.0],
+                [np.nan, 2.0],
+                [4.0, 0.0],
+                [6.0, 4.0],
+            ]
+        )
+        actual, n = _mat_mat_corr_dense_omit_nan(X, Y)
+        expected = np.empty_like(actual)
+        expected_n = np.empty_like(n, dtype=int)
+
+        for i, x in enumerate(X):
+            for j, y in enumerate(Y.T):
+                mask = np.isfinite(x) & np.isfinite(y)
+                expected[i, j] = st.pearsonr(x[mask], y[mask]).statistic
+                expected_n[i, j] = np.sum(mask)
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+        np.testing.assert_array_equal(n, expected_n)
 
 
 class TestToolsUtils:
