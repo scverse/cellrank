@@ -93,6 +93,7 @@ test = [
   "pytest>=8",
   "pytest-cov>=6",
   "pytest-mock>=3.14",
+  "pytest-timeout",
   "pytest-xdist",
   "scvelo>=0.3",
 ]
