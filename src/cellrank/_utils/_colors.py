@@ -1,15 +1,33 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import scipy.stats as st
+from anndata import AnnData
 from matplotlib import cm, colors
 from pandas.api.types import infer_dtype
-from scanpy.plotting.palettes import vega_20_scanpy
 
 logger = logging.getLogger(__name__)
+
+# Default palette for the first 20 categories, kept identical to scanpy's ``vega_20_scanpy``
+# (BSD-3): ``tab20`` reordered into dark-then-light without grey, with the colorblindness
+# adjustments from ``vega_10_scanpy`` and two manual additions. Defined here rather than
+# imported because scanpy 1.13 moved it into the private ``scanpy.plotting.legacy``, and the
+# committed figure baselines pin these exact values.
+_TAB_20 = [colors.to_hex(c) for c in cm.tab20.colors]
+_CATEGORICAL_20 = [
+    *_TAB_20[0:14:2],  # dark, without grey
+    *_TAB_20[16::2],
+    *_TAB_20[1:15:2],  # light, without grey
+    *_TAB_20[17::2],
+    "#ad494a",
+    "#8c6d31",
+]
+_CATEGORICAL_20[2] = "#279e68"  # green
+_CATEGORICAL_20[4] = "#aa40fc"  # purple
+_CATEGORICAL_20[7] = "#b5bd61"  # khaki
 
 
 def _create_colors(
@@ -85,7 +103,7 @@ def _convert_to_hex_colors(cols: Sequence[Any]) -> list[str]:
 
 def _create_categorical_colors(n_categories: int | None = None):
     cmaps = [
-        colors.ListedColormap(vega_20_scanpy),
+        colors.ListedColormap(_CATEGORICAL_20),
         cm.Accent,
         colors.ListedColormap(np.array(cm.Dark2.colors)[[1, 2, 4, 5, 6]]),
         cm.Set1,
@@ -307,3 +325,24 @@ def _compute_mean_color(cols: list[str]) -> str:
     cols = np.array([colors.rgb_to_hsv(colors.to_rgb(c)) for c in cols])
 
     return colors.to_hex(colors.hsv_to_rgb(np.mean(cols, axis=0)))
+
+
+def _get_categorical_colors(adata: AnnData, cluster_key: str) -> tuple[np.ndarray, Mapping[str, str]]:
+    """Return the colors of a categorical ``adata.obs`` column, creating them if needed."""
+    if cluster_key not in adata.obs:
+        raise KeyError(f"Unable to find data in `adata.obs[{cluster_key!r}].`")
+    if not isinstance(adata.obs[cluster_key].dtype, pd.CategoricalDtype):
+        raise TypeError(
+            f"Expected `adata.obs[{cluster_key!r}]` to be categorical, found `{infer_dtype(adata.obs[cluster_key])}`."
+        )
+
+    categories = adata.obs[cluster_key].cat.categories
+    color_key = f"{cluster_key}_colors"
+    cols = adata.uns.get(color_key, None)
+    # regenerate stale palettes (too short after a subset, or not color-like)
+    if cols is None or len(cols) < len(categories) or not all(colors.is_color_like(c) for c in cols):
+        adata.uns[color_key] = cols = _create_categorical_colors(len(categories))
+    mapper = dict(zip(categories, cols))
+    mapper[np.nan] = "grey"
+
+    return cols, mapper

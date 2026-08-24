@@ -18,9 +18,9 @@ from anndata import AnnData
 from matplotlib import cm, colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas.api.types import infer_dtype
-from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scipy.ndimage import convolve
 
+from cellrank._utils._colors import _get_categorical_colors
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._lineage import Lineage
@@ -1059,18 +1059,10 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
 
         if key in self.adata.obs:
             if isinstance(self.adata.obs[key].dtype, pd.CategoricalDtype):
-                add_colors_for_categorical_sample_annotation(
-                    self.adata,
-                    key=key,
-                    force_update_colors=False,
-                    palette=None,
-                )
+                cols, _ = _get_categorical_colors(self.adata, key)
                 col_dict = collections.defaultdict(
                     lambda: colors.to_rgb("grey"),
-                    zip(
-                        self.adata.obs[key].cat.categories,
-                        [colors.to_rgb(i) for i in self.adata.uns[f"{key}_colors"]],
-                    ),
+                    zip(self.adata.obs[key].cat.categories, [colors.to_rgb(c) for c in cols]),
                 )
                 return (
                     key,

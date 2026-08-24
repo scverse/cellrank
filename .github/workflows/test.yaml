@@ -59,6 +59,7 @@ jobs:
 
     name: ${{ matrix.env.label }}
     runs-on: ${{ matrix.os }}
+    # `pre` (pre-release deps) is best-effort and must not gate merges.
     continue-on-error: ${{ contains(matrix.env.name, 'pre') }}
 
     steps:
@@ -130,7 +131,7 @@ jobs:
     - name: Install cellrank + test dependencies
       run: |
         pip install -e '.[plot]'
-        pip install pytest pytest-cov pytest-mock pytest-timeout coverage igraph leidenalg pillow 'zarr<3'
+        pip install pytest pytest-cov pytest-mock pytest-timeout coverage igraph leidenalg pillow
     - name: List installed packages
       run: conda list
     - name: Run tests

@@ -20,6 +20,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.ndimage import convolve
 
 from cellrank._utils import Lineage
+from cellrank._utils._colors import _get_categorical_colors
 from cellrank._utils._docs import d, inject_docs
 from cellrank._utils._enum import DEFAULT_BACKEND, Backend_t, ModeEnum
 from cellrank._utils._parallelize import _get_n_cores
@@ -37,7 +38,6 @@ from cellrank.pl._utils import (
     _create_models,
     _fit_bulk,
     _get_backend,
-    _get_categorical_colors,
     _input_model_type,
     _return_model_type,
     _time_range_type,
