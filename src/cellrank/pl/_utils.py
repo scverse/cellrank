@@ -18,7 +18,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas.api.types import infer_dtype
 from sklearn.svm import SVR
 
-from cellrank._utils._colors import _create_categorical_colors
+from cellrank._utils._colors import _create_categorical_colors, _get_categorical_colors
 from cellrank._utils._docs import d
 from cellrank._utils._enum import DEFAULT_BACKEND
 from cellrank._utils._parallelize import parallelize
@@ -1054,25 +1054,6 @@ def _held_karp(dists: np.ndarray) -> tuple[float, np.ndarray]:
     path.append(0)
 
     return opt, np.array(path)[::-1]
-
-
-def _get_categorical_colors(adata: AnnData, cluster_key: str) -> tuple[np.ndarray, Mapping[str, str]]:
-    if cluster_key not in adata.obs:
-        raise KeyError(f"Unable to find data in `adata.obs[{cluster_key!r}].`")
-    if not isinstance(adata.obs[cluster_key].dtype, pd.CategoricalDtype):
-        raise TypeError(
-            f"Expected `adata.obs[{cluster_key!r}]` to be categorical, found `{infer_dtype(adata.obs[cluster_key])}`."
-        )
-
-    color_key = f"{cluster_key}_colors"
-    try:
-        colors = adata.uns[color_key]
-    except KeyError:
-        adata.uns[color_key] = colors = _create_categorical_colors(len(adata.obs[cluster_key].cat.categories))
-    mapper = dict(zip(adata.obs[cluster_key].cat.categories, colors))
-    mapper[np.nan] = "grey"
-
-    return colors, mapper
 
 
 def _get_sorted_colors(
