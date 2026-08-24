@@ -129,9 +129,8 @@ jobs:
         rpy2 r-mgcv
         pygpcca pygam scipy
     - name: Install cellrank + test dependencies
-      run: |
-        pip install -e '.[plot]'
-        pip install pytest pytest-cov pytest-mock pytest-timeout coverage igraph leidenalg pillow
+      # same `test` dependency group the hatch envs use, so the two never drift
+      run: pip install -e '.[plot]' --group test
     - name: List installed packages
       run: conda list
     - name: Run tests
