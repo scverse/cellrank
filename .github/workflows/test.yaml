@@ -59,11 +59,8 @@ jobs:
 
     name: ${{ matrix.env.label }}
     runs-on: ${{ matrix.os }}
-    # `pre` (pre-release deps) is best-effort. macOS is non-blocking too: pyGPCCA's
-    # `brandts` Schur decomposition is numerically unstable on Apple Silicon and
-    # fails the GPCCA tests there; the fix belongs upstream in pyGPCCA. The job
-    # still runs for visibility but must not gate merges.
-    continue-on-error: ${{ contains(matrix.env.name, 'pre') || matrix.os == 'macos-15' }}
+    # `pre` (pre-release deps) is best-effort and must not gate merges.
+    continue-on-error: ${{ contains(matrix.env.name, 'pre') }}
 
     steps:
     - uses: actions/checkout@v7
