@@ -7,7 +7,8 @@ import pandas as pd
 import scipy.stats as st
 from matplotlib import cm, colors
 from pandas.api.types import infer_dtype
-from scanpy.plotting.palettes import vega_20_scanpy
+
+from cellrank._utils._compat import vega_20_scanpy
 
 logger = logging.getLogger(__name__)
 

@@ -18,9 +18,9 @@ from anndata import AnnData
 from matplotlib import cm, colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas.api.types import infer_dtype
-from scanpy.plotting._utils import add_colors_for_categorical_sample_annotation
 from scipy.ndimage import convolve
 
+from cellrank._utils._compat import add_colors_for_categorical_sample_annotation
 from cellrank._utils._docs import d
 from cellrank._utils._enum import ModeEnum
 from cellrank._utils._lineage import Lineage
