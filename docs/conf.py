@@ -63,6 +63,8 @@ myst_heading_anchors = 2
 # hover
 tippy_anchor_parent_selector = "div.content"
 tippy_enable_mathjax = True
+# sphinx-tippy renders math in its tooltips only with MathJax, so it stays the renderer instead of math-core.
+html_math_renderer = "mathjax"
 # no need because of sphinxcontrib-bibtex
 tippy_enable_doitips = False
 
