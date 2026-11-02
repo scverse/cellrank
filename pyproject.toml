@@ -100,7 +100,7 @@ test = [
   "scvelo>=0.3",
 ]
 docs = [
-  "scverse-doc[full]>=0.3",
+  "scverse-doc[full]>=0.4",
   "sphinx>=7.4",
   "sphinx-autobuild",
   "sphinx-autodoc-typehints>=2.5",
