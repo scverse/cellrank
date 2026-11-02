@@ -40,7 +40,7 @@ estimated. The general structure of the framework, corresponding to steps **(i)*
   apply concepts from the theory of Markov chains to identify initial, terminal, and intermediate macrostates
   and compute fate probabilities.
 
-Our main (and recommended!) estimator is based on *Generalized Perron Cluster Cluster Analysis* (GPCCA)
+Our main (and recommended!) estimator is based on _Generalized Perron Cluster Cluster Analysis_ (GPCCA)
 {cite}`reuter:18,reuter:19`, a method originally developed to study molecular dynamics. CellRank uses a
 robust implementation of GPCCA through the [pyGPCCA] package. Please don't forget to cite both CellRank and GPCCA when
 using the {class}`~cellrank.estimators.GPCCA` estimator, see {doc}`citing CellRank <cite>`.

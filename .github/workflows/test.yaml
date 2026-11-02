@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-  - cron: 0 5 1,15 * *
+    - cron: 0 5 1,15 * *
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,24 +24,24 @@ jobs:
     outputs:
       envs: ${{ steps.get-envs.outputs.envs }}
     steps:
-    - uses: actions/checkout@v7
-      with:
-        filter: blob:none
-        fetch-depth: 0
-    - uses: astral-sh/setup-uv@v7
-    - name: Get test environments
-      id: get-envs
-      run: |
-        ENVS_JSON=$(uvx hatch env show --json | jq -c 'to_entries
-          | map(
-              select(.key | startswith("hatch-test"))
-              | {
-                  name: .key,
-                  label: (if (.key | contains("pre")) then .key + " (pre-release deps)" else .key end),
-                  python: .value.python
-                }
-            )')
-        echo "envs=${ENVS_JSON}" | tee $GITHUB_OUTPUT
+      - uses: actions/checkout@v7
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+      - name: Get test environments
+        id: get-envs
+        run: |
+          ENVS_JSON=$(uvx hatch env show --json | jq -c 'to_entries
+            | map(
+                select(.key | startswith("hatch-test"))
+                | {
+                    name: .key,
+                    label: (if (.key | contains("pre")) then .key + " (pre-release deps)" else .key end),
+                    python: .value.python
+                  }
+              )')
+          echo "envs=${ENVS_JSON}" | tee $GITHUB_OUTPUT
 
   test:
     needs: get-environments
@@ -51,11 +51,11 @@ jobs:
         os: [ubuntu-latest]
         env: ${{ fromJSON(needs.get-environments.outputs.envs) }}
         include:
-        - os: macos-15
-          env:
-            name: hatch-test.py3.12-stable
-            label: hatch-test.py3.12-stable (macOS)
-            python: '3.12'
+          - os: macos-15
+            env:
+              name: hatch-test.py3.12-stable
+              label: hatch-test.py3.12-stable (macOS)
+              python: "3.12"
 
     name: ${{ matrix.env.label }}
     runs-on: ${{ matrix.os }}
@@ -63,47 +63,47 @@ jobs:
     continue-on-error: ${{ contains(matrix.env.name, 'pre') }}
 
     steps:
-    - uses: actions/checkout@v7
-      with:
-        filter: blob:none
-        fetch-depth: 0
-    - uses: astral-sh/setup-uv@v7
-      with:
-        python-version: ${{ matrix.env.python }}
+      - uses: actions/checkout@v7
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.env.python }}
 
-    - name: Create hatch environment
-      run: uvx hatch env create ${{ matrix.env.name }}
-    - name: List installed packages
-      run: uvx hatch run ${{ matrix.env.name }}:uv pip list
-    - name: Run tests
-      env:
-        MPLBACKEND: agg
-      run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
-    # Upload the figures the plotting tests rendered so a maintainer can promote
-    # them to ground-truth baselines (see docs/contributing.md). Only the Linux
-    # py3.12-stable job is published: ground-truth figures must match the renderer
-    # CI validates against, and this is the canonical one. `always()` so figures
-    # are available even when an image comparison fails (the actual is saved
-    # before the assertion).
-    - name: Archive rendered figures (ground-truth baseline source)
-      if: always() && matrix.os == 'ubuntu-latest' && matrix.env.name == 'hatch-test.py3.12-stable'
-      uses: actions/upload-artifact@v7
-      with:
-        name: rendered-figures
-        path: tests/figures/*
-        retention-days: 14
-        compression-level: 0  # PNGs are already compressed
-        if-no-files-found: warn
-    - name: Generate coverage report
-      run: |
-        test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
-        uvx hatch run ${{ matrix.env.name }}:cov-report
-        uvx hatch run ${{ matrix.env.name }}:coverage xml
-    - name: Upload coverage
-      uses: codecov/codecov-action@v7
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
+      - name: Create hatch environment
+        run: uvx hatch env create ${{ matrix.env.name }}
+      - name: List installed packages
+        run: uvx hatch run ${{ matrix.env.name }}:uv pip list
+      - name: Run tests
+        env:
+          MPLBACKEND: agg
+        run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
+      # Upload the figures the plotting tests rendered so a maintainer can promote
+      # them to ground-truth baselines (see docs/contributing.md). Only the Linux
+      # py3.12-stable job is published: ground-truth figures must match the renderer
+      # CI validates against, and this is the canonical one. `always()` so figures
+      # are available even when an image comparison fails (the actual is saved
+      # before the assertion).
+      - name: Archive rendered figures (ground-truth baseline source)
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.env.name == 'hatch-test.py3.12-stable'
+        uses: actions/upload-artifact@v7
+        with:
+          name: rendered-figures
+          path: tests/figures/*
+          retention-days: 14
+          compression-level: 0 # PNGs are already compressed
+          if-no-files-found: warn
+      - name: Generate coverage report
+        run: |
+          test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
+          uvx hatch run ${{ matrix.env.name }}:cov-report
+          uvx hatch run ${{ matrix.env.name }}:coverage xml
+      - name: Upload coverage
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   test-conda:
     runs-on: ubuntu-latest
@@ -113,36 +113,36 @@ jobs:
       run:
         shell: bash -el {0}
     steps:
-    - uses: actions/checkout@v7
-      with:
-        filter: blob:none
-        fetch-depth: 0
-    - uses: conda-incubator/setup-miniconda@v4
-      with:
-        miniforge-version: latest
-        python-version: '3.12'
-        channels: conda-forge
-    - name: Install conda dependencies
-      run: >-
-        conda install --yes
-        petsc slepc petsc4py slepc4py mpi4py
-        rpy2 r-mgcv
-        pygpcca pygam scipy
-    - name: Install cellrank + test dependencies
-      # same `test` dependency group the hatch envs use, so the two never drift
-      run: pip install -e '.[plot]' --group test
-    - name: List installed packages
-      run: conda list
-    - name: Run tests
-      env:
-        MPLBACKEND: agg
-      run: python -m pytest tests/ -v --timeout=600 --cov --cov-report=xml
-    - name: Upload coverage
-      uses: codecov/codecov-action@v7
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        flags: conda
-        fail_ci_if_error: false
+      - uses: actions/checkout@v7
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: conda-incubator/setup-miniconda@v4
+        with:
+          miniforge-version: latest
+          python-version: "3.12"
+          channels: conda-forge
+      - name: Install conda dependencies
+        run: >-
+          conda install --yes
+          petsc slepc petsc4py slepc4py mpi4py
+          rpy2 r-mgcv
+          pygpcca pygam scipy
+      - name: Install cellrank + test dependencies
+        # same `test` dependency group the hatch envs use, so the two never drift
+        run: pip install -e '.[plot]' --group test
+      - name: List installed packages
+        run: conda list
+      - name: Run tests
+        env:
+          MPLBACKEND: agg
+        run: python -m pytest tests/ -v --timeout=600 --cov --cov-report=xml
+      - name: Upload coverage
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: conda
+          fail_ci_if_error: false
 
   check:
     name: All tests pass
@@ -150,7 +150,7 @@ jobs:
     needs: [get-environments, test, test-conda]
     runs-on: ubuntu-latest
     steps:
-    - uses: re-actors/alls-green@release/v1
-      with:
-        allowed-failures: test-conda
-        jobs: ${{ toJSON(needs) }}
+      - uses: re-actors/alls-green@release/v1
+        with:
+          allowed-failures: test-conda
+          jobs: ${{ toJSON(needs) }}

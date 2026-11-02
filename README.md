@@ -48,14 +48,14 @@ See the [installation guide](https://cellrank.readthedocs.io/en/latest/installat
 If you like CellRank, check out these packages from the same authors.
 Almost all are part of the [scverse ecosystem].
 
-| Package | Description | Reference |
-|---------|-------------|-----------|
-| [moscot] | Optimal transport for temporal, spatial, and spatio-temporal single-cell mapping | [Klein et al. (2025)] |
-| [moslin] | Trajectory inference with lineage barcodes via optimal transport (part of moscot) | [Lange et al. (2024)] |
-| [VeloVI] | RNA velocity with variational inference and uncertainty quantification (part of scvi-tools) | [Gayoso et al. (2024)] |
-| [RegVelo] | Jointly learning gene regulation and RNA velocity | [Wang et al. (2026)] |
-| [CellMapper] | kNN-based label, embedding, and molecular layer transfer between datasets | — |
-| [CellAnnotator] | LLM-based cell type annotation with support for major LLM providers | — |
+| Package         | Description                                                                                 | Reference              |
+| --------------- | ------------------------------------------------------------------------------------------- | ---------------------- |
+| [moscot]        | Optimal transport for temporal, spatial, and spatio-temporal single-cell mapping            | [Klein et al. (2025)]  |
+| [moslin]        | Trajectory inference with lineage barcodes via optimal transport (part of moscot)           | [Lange et al. (2024)]  |
+| [VeloVI]        | RNA velocity with variational inference and uncertainty quantification (part of scvi-tools) | [Gayoso et al. (2024)] |
+| [RegVelo]       | Jointly learning gene regulation and RNA velocity                                           | [Wang et al. (2026)]   |
+| [CellMapper]    | kNN-based label, embedding, and molecular layer transfer between datasets                   | —                      |
+| [CellAnnotator] | LLM-based cell type annotation with support for major LLM providers                         | —                      |
 
 [moscot]: https://moscot.readthedocs.io/
 [moslin]: https://moscot.readthedocs.io/en/latest/notebooks/tutorials/100_lineage.html
@@ -68,7 +68,6 @@ Almost all are part of the [scverse ecosystem].
 [Lange et al. (2024)]: https://doi.org/10.1186/s13059-024-03422-4
 [Gayoso et al. (2024)]: https://doi.org/10.1038/s41592-023-01994-w
 [Wang et al. (2026)]: https://www.cell.com/cell/fulltext/S0092-8674(26)00457-5
-
 [La Manno et al. (2018)]: https://doi.org/10.1038/s41586-018-0414-6
 [Bergen et al. (2020)]: https://doi.org/10.1038/s41587-020-0591-3
 [Reuter et al. (2018)]: https://doi.org/10.1021/acs.jctc.8b00079
