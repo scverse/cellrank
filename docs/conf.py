@@ -5,11 +5,15 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 # -- Path setup --------------------------------------------------------------
+import sys
 from datetime import datetime
 from importlib.metadata import metadata
+from pathlib import Path
 
 from scverse_doc.config import MYST_ENABLE_EXTENSIONS
 from scverse_doc.registry import intersphinx
+
+sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 # -- Project information -----------------------------------------------------
 
