@@ -1,4 +1,4 @@
-# Citing CellRank
+# Citation
 
 If you find CellRank useful for your research, please consider citing our work as follows: If you are using
 CellRank's {class}`~cellrank.kernels.VelocityKernel` with classical RNA velocity, cite {cite}`lange:22` as:
