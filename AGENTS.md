@@ -16,30 +16,30 @@ Every fact should have one owner. This file owns invariants and the reference ta
 
 ## Where To Find What
 
-| Topic | Source of truth |
-|-------|----------------|
-| User-facing overview, install | `README.md`, `docs/index.md`, `docs/installation.md` |
-| Design principles, two-layer architecture, scalability | `docs/about/index.md` |
-| Public API reference | `docs/api/` (autosummary pages generated at build time) |
-| Contributor setup, testing, docs build | `docs/contributing.md` |
-| Tutorials | `docs/notebooks/tutorials/` (`cellrank_notebooks` submodule) |
-| Release notes | `docs/release_notes.md` |
-| PR review workflow and risk areas | `REVIEW_GUIDE.md` |
-| Test fixtures | `tests/conftest.py` |
-| CI jobs: test matrix + which extras run where | `.github/workflows/test.yaml` |
+| Topic                                                  | Source of truth                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| User-facing overview, install                          | `README.md`, `docs/index.md`, `docs/installation.md`         |
+| Design principles, two-layer architecture, scalability | `docs/about/index.md`                                        |
+| Public API reference                                   | `docs/api/` (autosummary pages generated at build time)      |
+| Contributor setup, testing, docs build                 | `docs/contributing.md`                                       |
+| Tutorials                                              | `docs/notebooks/tutorials/` (`cellrank_notebooks` submodule) |
+| Release notes                                          | `docs/release_notes.md`                                      |
+| PR review workflow and risk areas                      | `REVIEW_GUIDE.md`                                            |
+| Test fixtures                                          | `tests/conftest.py`                                          |
+| CI jobs: test matrix + which extras run where          | `.github/workflows/test.yaml`                                |
 
 ## Module Map
 
 Two layers: **kernels** build transition matrices, **estimators** analyze them. Pointers only — class behavior lives in docstrings, design rationale in `docs/about/index.md`.
 
-| Module | What lives there |
-|--------|------------------|
-| `src/cellrank/kernels/` | Layer 1 — a kernel turns one biological signal into a transition matrix. `VelocityKernel`, `PseudotimeKernel`, `CytoTRACEKernel`, `ConnectivityKernel`, `RealTimeKernel`, `PrecomputedKernel`; base classes + composition in `_base_kernel.py`. |
-| `src/cellrank/estimators/` | Layer 2 — an estimator analyzes a transition matrix. `GPCCA` (recommended) and `CFLARE` under `terminal_states/`; spectral/fate logic in `mixins/`. |
-| `src/cellrank/models/` | Gene-trend models fit along lineages (`prepare` → `fit` → `predict`): `GAM`, `GAMR`, `SKLearnModel`. |
-| `src/cellrank/pl/` | Plotting: `circular_projection`, `gene_trends`, `heatmap`, `cluster_trends`, `log_odds`, `aggregate_fate_probabilities`. |
-| `src/cellrank/datasets.py` | Example datasets (downloaded on demand). |
-| `src/cellrank/_utils/` | Core utilities: `Lineage` (`_lineage.py`), AnnData key naming (`_key.py`), linear solvers (`_linear_solver.py`), optional-import guards (`_import_utils.py`). |
+| Module                     | What lives there                                                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/cellrank/kernels/`    | Layer 1 — a kernel turns one biological signal into a transition matrix. `VelocityKernel`, `PseudotimeKernel`, `CytoTRACEKernel`, `ConnectivityKernel`, `RealTimeKernel`, `PrecomputedKernel`; base classes + composition in `_base_kernel.py`. |
+| `src/cellrank/estimators/` | Layer 2 — an estimator analyzes a transition matrix. `GPCCA` (recommended) and `CFLARE` under `terminal_states/`; spectral/fate logic in `mixins/`.                                                                                             |
+| `src/cellrank/models/`     | Gene-trend models fit along lineages (`prepare` → `fit` → `predict`): `GAM`, `GAMR`, `SKLearnModel`.                                                                                                                                            |
+| `src/cellrank/pl/`         | Plotting: `circular_projection`, `gene_trends`, `heatmap`, `cluster_trends`, `log_odds`, `aggregate_fate_probabilities`.                                                                                                                        |
+| `src/cellrank/datasets.py` | Example datasets (downloaded on demand).                                                                                                                                                                                                        |
+| `src/cellrank/_utils/`     | Core utilities: `Lineage` (`_lineage.py`), AnnData key naming (`_key.py`), linear solvers (`_linear_solver.py`), optional-import guards (`_import_utils.py`).                                                                                   |
 
 **Typical flow:** build a kernel → `kernel.compute_transition_matrix()` → optionally compose (`0.8 * vk + 0.2 * ck`) → `GPCCA(kernel)` → `compute_schur()` → `compute_macrostates()` → `predict_terminal_states()` (or `set_terminal_states()`) → `compute_fate_probabilities()` → `compute_lineage_drivers()`.
 
