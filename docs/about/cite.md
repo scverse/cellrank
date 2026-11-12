@@ -66,38 +66,38 @@ Finally, if you are following the CellRank Protocol {cite}`weiler:25`, please ci
 
 ## CellRank papers
 
-### CellRank 1 — *Nature Methods*, 2022
+### CellRank 1 — _Nature Methods_, 2022
 
 The original CellRank publication introduced a framework for directed single-cell fate mapping
 based on RNA velocity and gene expression similarity. It combines these signals via a Markov chain
 formulation, uses the GPCCA algorithm to identify initial and terminal states, and builds on
 Markov chain theory to compute fate probabilities and infer driver genes.
 
-Lange, M. *et al.* [CellRank for directed single-cell fate mapping.](https://doi.org/10.1038/s41592-021-01346-6) *Nat. Methods* **19**, 159–170 (2022).
+Lange, M. _et al._ [CellRank for directed single-cell fate mapping.](https://doi.org/10.1038/s41592-021-01346-6) _Nat. Methods_ **19**, 159–170 (2022).
 
 See the {doc}`RNA velocity tutorial <../notebooks/tutorials/kernels/200_rna_velocity>` to get started
 with the VelocityKernel.
 
-### CellRank 2 — *Nature Methods*, 2024
+### CellRank 2 — _Nature Methods_, 2024
 
 CellRank 2 generalizes the framework beyond RNA velocity, unifying multiple biological signals
 — pseudotime, developmental potential (CytoTRACE), real-time experimental time points via optimal
 transport, and more — into a single coherent API. It introduces the PseudotimeKernel,
 CytoTRACEKernel, and RealTimeKernel alongside the original VelocityKernel.
 
-Weiler, P. *et al.* [CellRank 2: unified fate mapping in multiview single-cell data.](https://doi.org/10.1038/s41592-024-02303-9) *Nat. Methods* **21**, 1196–1205 (2024).
+Weiler, P. _et al._ [CellRank 2: unified fate mapping in multiview single-cell data.](https://doi.org/10.1038/s41592-024-02303-9) _Nat. Methods_ **21**, 1196–1205 (2024).
 
 See {doc}`../notebooks/tutorials/kernels/300_pseudotime`,
 {doc}`../notebooks/tutorials/kernels/400_cytotrace`, and
 {doc}`../notebooks/tutorials/kernels/500_real_time` for kernel-specific tutorials.
 
-### CellRank Protocol — *Nature Protocols*, 2026
+### CellRank Protocol — _Nature Protocols_, 2026
 
 A step-by-step practical guide for applying CellRank to single-cell data. The protocol covers
 the full workflow from data preprocessing to fate probability computation and downstream analysis,
 making it the ideal starting point for new users.
 
-Weiler, P. & Theis, F. J. [CellRank: consistent and data view agnostic fate mapping for single-cell genomics.](https://doi.org/10.1038/s41596-025-01314-w) *Nat. Protoc.* (2026).
+Weiler, P. & Theis, F. J. [CellRank: consistent and data view agnostic fate mapping for single-cell genomics.](https://doi.org/10.1038/s41596-025-01314-w) _Nat. Protoc._ (2026).
 
 See the [protocol GitHub repository](https://github.com/theislab/cellrank_protocol) for all
 accompanying notebooks and data.
