@@ -14,11 +14,11 @@ and [rpy2](https://rpy2.github.io) installed.
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: _autosummary/models
+   :toctree: _autosummary/models
 
-    models.GAM
-    models.GAMR
-    models.SKLearnModel
+   models.GAM
+   models.GAMR
+   models.SKLearnModel
 ```
 
 ## Signals
@@ -30,10 +30,10 @@ an {attr}`~anndata.AnnData.obs` covariate (e.g. a gene module score), or a colum
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: _autosummary/models
+   :toctree: _autosummary/models
 
-    models.Signal
-    models.Gene
-    models.Obs
-    models.Obsm
+   models.Signal
+   models.Gene
+   models.Obs
+   models.Obsm
 ```

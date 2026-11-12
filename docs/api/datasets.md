@@ -13,12 +13,12 @@ automatically download these datasets; see our {doc}`tutorials <../notebooks/tut
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: _autosummary/datasets
+   :toctree: _autosummary/datasets
 
-    datasets.pancreas
-    datasets.lung
-    datasets.reprogramming_morris
-    datasets.reprogramming_schiebinger
-    datasets.zebrafish
-    datasets.bone_marrow
+   datasets.pancreas
+   datasets.lung
+   datasets.reprogramming_morris
+   datasets.reprogramming_schiebinger
+   datasets.zebrafish
+   datasets.bone_marrow
 ```

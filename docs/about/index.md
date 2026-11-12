@@ -42,7 +42,7 @@ estimated. The general structure of the framework, corresponding to steps **(i)*
 
 Our main (and recommended!) estimator is based on *Generalized Perron Cluster Cluster Analysis* (GPCCA)
 {cite}`reuter:18,reuter:19`, a method originally developed to study molecular dynamics. CellRank uses a
-robust implementation of GPCCA through the [pyGPCCA] package. Please don't forget to cite both CellRank and GPCCA when
+robust implementation of GPCCA through the [pyGPCCA] package. Please don’t forget to cite both CellRank and GPCCA when
 using the {class}`~cellrank.estimators.GPCCA` estimator, see {doc}`citing CellRank <cite>`.
 
 We use fate probabilities to visualize trajectory-specific gene expression trends, infer putative driver genes,
@@ -60,9 +60,9 @@ inversion problem into a set of linear systems, which we solve in parallel using
 efficiently in [PETSc]. We use similar tricks to infer macrostates of cellular dyanmics via sparsity-optimized partial real Schur
 decompositions (implemented under the hood via [pyGPCCA] and [SLEPc]).
 
-## Why is it called "CellRank"?
+## Why is it called “CellRank”?
 
-CellRank **does not** rank cells, we gave the package this name because just like Google's original [PageRank]
+CellRank **does not** rank cells, we gave the package this name because just like Google’s original [PageRank]
 algorithm, it works with Markov chains to aggregate relationships between individual objects (cells vs. websites)
 to learn about more global properties of the underlying dynamics (initial & terminal states and fate probabilities vs.
 website relevance).

@@ -22,54 +22,70 @@
 
 ### Similarity
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.SimilarityABC
     :members:
     :special-members: __call__
     :inherited-members:
 ```
+<!-- panache-ignore-format-end -->
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.Cosine
     :members: __call__, hessian
 ```
+<!-- panache-ignore-format-end -->
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.Correlation
     :members: __call__, hessian
 ```
+<!-- panache-ignore-format-end -->
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.DotProduct
     :members: __call__, hessian
 ```
+<!-- panache-ignore-format-end -->
 
 ### Threshold Scheme
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.ThresholdSchemeABC
     :members:
     :special-members: __call__
     :inherited-members:
 ```
+<!-- panache-ignore-format-end -->
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.HardThresholdScheme
     :members:
     :special-members: __call__
 ```
+<!-- panache-ignore-format-end -->
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.SoftThresholdScheme
     :members:
     :special-members: __call__
 ```
+<!-- panache-ignore-format-end -->
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. autoclass:: cellrank.kernels.utils.CustomThresholdScheme
     :members:
     :special-members: __call__
 ```
+<!-- panache-ignore-format-end -->
 
 ## Estimators
 

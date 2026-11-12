@@ -8,7 +8,7 @@ to compute initial and terminal states, fate probabilities, and driver genes.
 
 With version 2, we are generalizing CellRank beyond RNA velocity data and turn it into a general framework for
 single-cell fate mapping based on various data modalities (see {doc}`index`). This required us to make substantial
-changes to CellRank's API, many of which are **backward-compatibility breaking**. CellRank 2 can do everything that
+changes to CellRank’s API, many of which are **backward-compatibility breaking**. CellRank 2 can do everything that
 version 1 could do (and much more); however, it does it differently.
 
 :::{important}
