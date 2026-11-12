@@ -10,7 +10,7 @@ For more extensive tutorials covering the absolute basics, refer to the
 [Scientific Python tutorials]: https://learn.scientific-python.org/development/tutorials/
 [scanpy developer guide]: https://scanpy.readthedocs.io/en/latest/dev/index.html
 
-:::{tip} The _hatch_ project manager
+:::{tip} The *hatch* project manager
 We recommend familiarizing yourself with [hatch].
 Hatch is a Python project manager that
 
@@ -242,7 +242,7 @@ against** — the Linux `hatch-test.py3.12-stable` job. Do **not** commit a figu
 rendered on your laptop (e.g. macOS); it will drift and fail on CI.
 
 CI never updates baselines on its own: every run compares against the committed
-figures and fails on drift. It only _exposes_ what it rendered. When you have
+figures and fails on drift. It only *exposes* what it rendered. When you have
 intentionally changed a plot (or are migrating a class to a tighter tolerance):
 
 1. Push your branch and let the `Test` workflow run.

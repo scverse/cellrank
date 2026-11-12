@@ -29,21 +29,21 @@ Pointers only — see `AGENTS.md` for the actual invariants.
 
 Flat layout — `tests/test_X.py` keyed by component, not a mirror of `src/`.
 
-| Changed path                            | Primary tests                                                                                            |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `src/cellrank/kernels/`                 | `tests/test_kernels.py`; add `tests/test_pipeline.py` for composition                                    |
-| `src/cellrank/estimators/`              | `tests/test_gpcca.py`, `tests/test_cflare.py`, `tests/test_lineage_drivers.py`, `tests/test_pipeline.py` |
-| `src/cellrank/models/`                  | `tests/test_model.py`                                                                                    |
-| `src/cellrank/pl/`                      | `tests/test_plotting.py`                                                                                 |
-| `src/cellrank/_utils/_lineage.py`       | `tests/test_lineage.py`                                                                                  |
-| `src/cellrank/_utils/_linear_solver.py` | `tests/test_linear_solver.py`                                                                            |
-| Fixture changes                         | `tests/conftest.py`                                                                                      |
+| Changed path | Primary tests |
+|--------------|---------------|
+| `src/cellrank/kernels/` | `tests/test_kernels.py`; add `tests/test_pipeline.py` for composition |
+| `src/cellrank/estimators/` | `tests/test_gpcca.py`, `tests/test_cflare.py`, `tests/test_lineage_drivers.py`, `tests/test_pipeline.py` |
+| `src/cellrank/models/` | `tests/test_model.py` |
+| `src/cellrank/pl/` | `tests/test_plotting.py` |
+| `src/cellrank/_utils/_lineage.py` | `tests/test_lineage.py` |
+| `src/cellrank/_utils/_linear_solver.py` | `tests/test_linear_solver.py` |
+| Fixture changes | `tests/conftest.py` |
 
 ## Testing
 
 - **New code** should be covered. Reuse fixtures from `tests/conftest.py`; prefer `pytest.mark.parametrize`; favor few meaningful tests over many redundant ones.
-- **Failing CI** is not to be waved through. Distinguish critical regressions from flakes or expected skips (PETSc/SLEPc and R-backed tests skip in the main matrix when the extras are missing — but they still run in the dedicated `PETSc / SLEPc + R` job in `.github/workflows/test.yaml`, so a _failure_ there is real, not an expected skip); escalate critical failures.
-- **Modified tests** — scrutinize _how_. Relaxed tolerances, removed assertions, deleted cases, or loosened matrices are red flags. Require explicit justification in the PR body.
+- **Failing CI** is not to be waved through. Distinguish critical regressions from flakes or expected skips (PETSc/SLEPc and R-backed tests skip in the main matrix when the extras are missing — but they still run in the dedicated `PETSc / SLEPc + R` job in `.github/workflows/test.yaml`, so a *failure* there is real, not an expected skip); escalate critical failures.
+- **Modified tests** — scrutinize *how*. Relaxed tolerances, removed assertions, deleted cases, or loosened matrices are red flags. Require explicit justification in the PR body.
 
 ## Documentation Impact
 
