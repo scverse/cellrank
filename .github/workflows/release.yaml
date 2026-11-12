@@ -14,12 +14,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-    - uses: actions/checkout@v7
-      with:
-        filter: blob:none
-        fetch-depth: 0
-    - uses: astral-sh/setup-uv@v7
-    - name: Build package
-      run: uv build
-    - name: Publish package
-      uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/checkout@v7
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+      - name: Build package
+        run: uv build
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1
