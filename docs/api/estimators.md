@@ -14,8 +14,8 @@ of fate probabilities. Our recommended estimator is the {class}`~cellrank.estima
 
 ```{eval-rst}
 .. autosummary::
-    :toctree: _autosummary/estimators
+   :toctree: _autosummary/estimators
 
-    estimators.GPCCA
-    estimators.CFLARE
+   estimators.GPCCA
+   estimators.CFLARE
 ```

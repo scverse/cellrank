@@ -29,15 +29,15 @@ Pointers only — see `AGENTS.md` for the actual invariants.
 
 Flat layout — `tests/test_X.py` keyed by component, not a mirror of `src/`.
 
-| Changed path | Primary tests |
-|--------------|---------------|
-| `src/cellrank/kernels/` | `tests/test_kernels.py`; add `tests/test_pipeline.py` for composition |
-| `src/cellrank/estimators/` | `tests/test_gpcca.py`, `tests/test_cflare.py`, `tests/test_lineage_drivers.py`, `tests/test_pipeline.py` |
-| `src/cellrank/models/` | `tests/test_model.py` |
-| `src/cellrank/pl/` | `tests/test_plotting.py` |
-| `src/cellrank/_utils/_lineage.py` | `tests/test_lineage.py` |
-| `src/cellrank/_utils/_linear_solver.py` | `tests/test_linear_solver.py` |
-| Fixture changes | `tests/conftest.py` |
+  | Changed path                            | Primary tests                                                                                            |
+  | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+  | `src/cellrank/kernels/`                 | `tests/test_kernels.py`; add `tests/test_pipeline.py` for composition                                    |
+  | `src/cellrank/estimators/`              | `tests/test_gpcca.py`, `tests/test_cflare.py`, `tests/test_lineage_drivers.py`, `tests/test_pipeline.py` |
+  | `src/cellrank/models/`                  | `tests/test_model.py`                                                                                    |
+  | `src/cellrank/pl/`                      | `tests/test_plotting.py`                                                                                 |
+  | `src/cellrank/_utils/_lineage.py`       | `tests/test_lineage.py`                                                                                  |
+  | `src/cellrank/_utils/_linear_solver.py` | `tests/test_linear_solver.py`                                                                            |
+  | Fixture changes                         | `tests/conftest.py`                                                                                      |
 
 ## Testing
 
@@ -47,7 +47,7 @@ Flat layout — `tests/test_X.py` keyed by component, not a mirror of `src/`.
 
 ## Documentation Impact
 
-Behavior or API changes often touch docs in multiple places. Point at the **owning file**, don't duplicate content in the review.
+Behavior or API changes often touch docs in multiple places. Point at the **owning file**, don’t duplicate content in the review.
 
 - Public symbol / API changes → `docs/api/` + autosummary, `README.md` quickstart.
 - Design-principle or architectural changes → `docs/about/index.md`.

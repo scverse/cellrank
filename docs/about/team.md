@@ -1,11 +1,12 @@
 # Team
 
-CellRank was started as a collaboration between the Theis lab at Helmholtz Munich and the Pe'er lab at Memorial Sloan
+CellRank was started as a collaboration between the Theis lab at Helmholtz Munich and the Pe’er lab at Memorial Sloan
 Kettering Cancer Center (MSKCC). We are happy about every code contribution we received so far, check out the
 [contributions](https://github.com/theislab/cellrank/graphs/contributors) section on GitHub for an overview. CellRank is now part of the [scVerse GitHub organization](https://github.com/scverse).
 
 ## Principal Investigators
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. grid:: auto
 
@@ -23,9 +24,11 @@ Kettering Cancer Center (MSKCC). We are happy about every code contribution we r
         - :fas:`graduation-cap` `Google Scholar <https://scholar.google.com/citations?user=aJOeGRoAAAAJ>`_
         - :fab:`github` `dpeerlab <https://github.com/dpeerlab>`_
 ```
+<!-- panache-ignore-format-end -->
 
 ## Core Development Team
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. grid:: auto
 
@@ -48,9 +51,10 @@ Kettering Cancer Center (MSKCC). We are happy about every code contribution we r
         - :fas:`graduation-cap` `Google Scholar <https://scholar.google.com/citations?user=zByzdzcAAAAJ>`__
         - :fab:`github` `michalk8 <https://github.com/michalk8>`_
 ```
+<!-- panache-ignore-format-end -->
 
 ## `pyGPCCA` Development
 
-CellRank's GPCCA estimator is based on [pyGPCCA](https://github.com/msmdev/pyGPCCA) for coarse-graining of
+CellRank’s GPCCA estimator is based on [pyGPCCA](https://github.com/msmdev/pyGPCCA) for coarse-graining of
 non-reversible Markov chains {cite}`reuter:19`; check out [their documentation](https://pygpcca.readthedocs.io/)
 to learn about contributions.
