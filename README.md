@@ -25,7 +25,7 @@ CellRank scales to large cell numbers, is fully compatible with the [scverse] ec
 In the backend, it is powered by [pyGPCCA] ([Reuter et al. (2018)]). Feel
 free to open an [issue] if you encounter a bug, need our help, or just want to make a comment/suggestion.
 
-## CellRank's key applications
+## CellRank’s key applications
 
 - Estimate differentiation direction based on a varied number of biological priors, including RNA velocity
   ([La Manno et al. (2018)], [Bergen et al. (2020)]), any pseudotime or developmental potential,
@@ -48,14 +48,14 @@ See the [installation guide](https://cellrank.readthedocs.io/en/latest/installat
 If you like CellRank, check out these packages from the same authors.
 Almost all are part of the [scverse ecosystem].
 
-| Package | Description | Reference |
-|---------|-------------|-----------|
-| [moscot] | Optimal transport for temporal, spatial, and spatio-temporal single-cell mapping | [Klein et al. (2025)] |
-| [moslin] | Trajectory inference with lineage barcodes via optimal transport (part of moscot) | [Lange et al. (2024)] |
-| [VeloVI] | RNA velocity with variational inference and uncertainty quantification (part of scvi-tools) | [Gayoso et al. (2024)] |
-| [RegVelo] | Jointly learning gene regulation and RNA velocity | [Wang et al. (2026)] |
-| [CellMapper] | kNN-based label, embedding, and molecular layer transfer between datasets | — |
-| [CellAnnotator] | LLM-based cell type annotation with support for major LLM providers | — |
+  | Package         | Description                                                                                 | Reference              |
+  | --------------- | ------------------------------------------------------------------------------------------- | ---------------------- |
+  | [moscot]        | Optimal transport for temporal, spatial, and spatio-temporal single-cell mapping            | [Klein et al. (2025)]  |
+  | [moslin]        | Trajectory inference with lineage barcodes via optimal transport (part of moscot)           | [Lange et al. (2024)]  |
+  | [VeloVI]        | RNA velocity with variational inference and uncertainty quantification (part of scvi-tools) | [Gayoso et al. (2024)] |
+  | [RegVelo]       | Jointly learning gene regulation and RNA velocity                                           | [Wang et al. (2026)]   |
+  | [CellMapper]    | kNN-based label, embedding, and molecular layer transfer between datasets                   | —                      |
+  | [CellAnnotator] | LLM-based cell type annotation with support for major LLM providers                         | —                      |
 
 [moscot]: https://moscot.readthedocs.io/
 [moslin]: https://moscot.readthedocs.io/en/latest/notebooks/tutorials/100_lineage.html

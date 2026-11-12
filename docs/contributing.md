@@ -27,7 +27,7 @@ you can also use other tools such as `uv` or `pip`.
 
 ## Installing dev dependencies
 
-In addition to the packages needed to _use_ CellRank,
+In addition to the packages needed to *use* CellRank,
 you need additional packages to [run tests](#writing-tests) and [build the documentation](#building-the-docs-locally).
 
 :::::{tab-set}
@@ -44,7 +44,7 @@ hatch run docs:build  # defined in [tool.hatch.envs.docs]
 ```
 
 When using an IDE such as VS Code,
-you'll have to point the editor at the virtual environment paths manually.
+you’ll have to point the editor at the virtual environment paths manually.
 The environment you typically want to use is the `hatch-test`
 environment with the latest Python version.
 
@@ -122,7 +122,7 @@ in the root of the repository.
 Pre-commit will automatically download all dependencies when it is run for the first time.
 
 Alternatively, you can rely on the [pre-commit.ci] service enabled on GitHub.
-If you didn't run `pre-commit` before pushing changes to GitHub, it will
+If you didn’t run `pre-commit` before pushing changes to GitHub, it will
 automatically commit fixes to your pull request, or show an error message.
 If pre-commit.ci added a commit on a branch you still have been working on locally, use
 
@@ -136,7 +136,7 @@ locally first to understand its usage.
 
 We use [Ruff] for linting and formatting Python code,
 and [Biome] for JSON/JSONC formatting.
-Most editors have an _autoformat on save_ feature — consider enabling
+Most editors have an *autoformat on save* feature — consider enabling
 it for [Ruff][ruff-editors] and [Biome][biome-editors].
 
 [pre-commit]: https://pre-commit.com/
@@ -202,9 +202,9 @@ pytest
 Continuous integration via GitHub Actions will automatically run the tests on all
 pull requests, testing against the minimum and maximum supported Python version.
 
-Additionally, there's a CI job that tests against pre-releases of all
+Additionally, there’s a CI job that tests against pre-releases of all
 dependencies (if there are any). This detects incompatibilities early and
-gives you time to fix the issue or reach out to the dependency's developers
+gives you time to fix the issue or reach out to the dependency’s developers
 before the package is released to a wider audience.
 
 The CI job is defined in `.github/workflows/test.yaml`,
@@ -266,7 +266,7 @@ This project uses [Sphinx] with the following features:
 - [sphinx-autodoc-typehints] to automatically reference annotated input and output types
 - Citations (like {cite:p}`lange:22`) via [sphinxcontrib-bibtex]
 
-See scanpy's {doc}`scanpy:dev/documentation` for more information on how to write your own.
+See scanpy’s {doc}`scanpy:dev/documentation` for more information on how to write your own.
 
 [Sphinx]: https://www.sphinx-doc.org/en/master/
 [MyST]: https://myst-parser.readthedocs.io/en/latest/intro.html
