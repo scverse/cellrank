@@ -17,3 +17,11 @@ updates:
         update-types: ["minor", "patch"]
     ignore:
       - dependency-name: scvelo
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      pre-commit:
+        patterns: ["*"]
