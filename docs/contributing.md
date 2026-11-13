@@ -192,7 +192,16 @@ pytest
 ::::
 :::::
 
+These environments skip the PETSc/SLEPc and R-backed tests. To run those too,
+use the [pixi] environment that takes PETSc, SLEPc and R’s `mgcv` from
+conda-forge (Linux):
+
+```bash
+pixi run -e krylov test
+```
+
 [pytest]: https://docs.pytest.org/
+[pixi]: https://pixi.sh/
 
 ### Continuous integration
 
@@ -207,7 +216,8 @@ before the package is released to a wider audience.
 The CI job is defined in `.github/workflows/test.yaml`,
 however the single point of truth for CI jobs is the Hatch test matrix
 defined in `pyproject.toml`. Local testing via hatch and remote CI testing
-use the same Python versions and environments.
+use the same Python versions and environments. A separate job runs the
+`krylov` pixi environment above.
 
 (plotting-tests)=
 

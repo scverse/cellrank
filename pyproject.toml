@@ -75,11 +75,11 @@ optional-dependencies.petsc = [ "petsc4py", "slepc4py" ]
 optional-dependencies.plot = [ "adjusttext" ]
 optional-dependencies.r = [ "rpy2>=3.3" ]
 optional-dependencies.scvelo = [ "scvelo>=0.3" ]
-urls."Bug Tracker" = "https://github.com/theislab/cellrank/issues"
-urls."Source Code" = "https://github.com/theislab/cellrank"
+urls."Bug Tracker" = "https://github.com/scverse/cellrank/issues"
+urls."Source Code" = "https://github.com/scverse/cellrank"
 urls.Documentation = "https://cellrank.readthedocs.io"
 urls.Download = "https://cellrank.readthedocs.io/en/latest/installation.html"
-urls.Homepage = "https://github.com/theislab/cellrank"
+urls.Homepage = "https://github.com/scverse/cellrank"
 
 [dependency-groups]
 dev = [
@@ -126,6 +126,18 @@ envs.hatch-test.matrix = [
 ]
 envs.hatch-test.overrides.matrix.deps.env-vars = [ { value = "allow", key = "UV_PRERELEASE", if = [ "pre" ] } ]
 envs.hatch-test.dependency-groups = [ "test" ]
+
+[tool.pixi]
+# PETSc/SLEPc and R's mgcv have no PyPI wheels; this environment takes them from conda-forge: `pixi run -e krylov test`.
+# Not named `petsc` or `r`: pixi turns those extras into features that would install from PyPI.
+workspace.channels = [ "conda-forge" ]
+workspace.platforms = [ "linux-64" ]
+dependencies.python = "3.12.*"
+pypi-dependencies.cellrank = { path = ".", editable = true, extras = [ "plot" ] }
+feature.krylov.dependencies = { petsc4py = "*", slepc4py = "*", rpy2 = ">=3.3", r-mgcv = "*" }
+# one BLAS thread: conda-forge BLAS otherwise oversubscribes cores; PETSc must not catch xdist workers' SIGPIPE
+feature.krylov.tasks.test = { cmd = "pytest", env = { OMP_NUM_THREADS = "1", MPLBACKEND = "agg", PETSC_OPTIONS = "-no_signal_handler" } }
+environments.krylov = [ "krylov", "test" ]
 
 [tool.uv]
 # Include test deps in `uv sync` so local dev has them (e.g. adjusttext, pytest)

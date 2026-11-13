@@ -1,0 +1,40 @@
+{
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "6518dfa1abde7379ea7255daf0ce09c23f2b4c94",
+  "checkout": "v0.8.0",
+  "context": {
+    "cookiecutter": {
+      "project_name": "cellrank",
+      "package_name": "cellrank",
+      "project_description": "CellRank: dynamics from multi-view single-cell data",
+      "author_full_name": "Marius Lange",
+      "author_email": "mlange@ethz.ch",
+      "github_user": "scverse",
+      "github_repo": "cellrank",
+      "license": "BSD 3-Clause License",
+      "ide_integration": false,
+      "issue_categorization": "labels",
+      "_copy_without_render": [
+        ".github/workflows/build.yaml",
+        ".github/workflows/test.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_exclude_on_template_update": [
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+        "docs/**",
+        "src/**",
+        "tests/**"
+      ],
+      "_render_devdocs": false,
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_template": "https://github.com/scverse/cookiecutter-scverse",
+      "_commit": "6518dfa1abde7379ea7255daf0ce09c23f2b4c94"
+    }
+  },
+  "directory": null
+}
