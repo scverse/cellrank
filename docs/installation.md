@@ -94,6 +94,27 @@ small to medium datasets. To use PETSc and SLEPc on Windows, run CellRank inside
 [WSL] and install via conda there.
 ```
 
+### UCX errors flood the log on HPC nodes
+
+conda-forge builds PETSc with MPI. On cluster nodes with InfiniBand and a low
+locked-memory limit (`ulimit -l`), MPI’s communication layer (UCX) can log
+errors such as the following in an endless loop while the job stops
+progressing, without raising a Python exception:
+
+```text
+UCX  ERROR ibv_reg_mr(...) failed: Cannot allocate memory : Please set max locked memory (ulimit -l) to 'unlimited' (current: 8192 kbytes)
+```
+
+CellRank parallelizes with joblib, not MPI, so it does not need InfiniBand.
+Before starting Python, restrict UCX to shared memory and TCP:
+
+```bash
+export UCX_TLS=self,sm,tcp
+```
+
+Alternatively, use the serial pip build above (`--with-mpi=0`), which does not
+use MPI at all, or pass `use_petsc=False`.
+
 ## Development version
 
 To install the latest development version from GitHub:
