@@ -30,6 +30,10 @@ datasets/
 /.github/prompts/
 .idea/
 .vscode/
+.github/prompts/
+
+# uv
+uv.lock
 
 # pixi: no lockfile, so CI tests the latest conda-forge PETSc/SLEPc
 /pixi.lock
