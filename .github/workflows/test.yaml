@@ -6,29 +6,33 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: 0 5 1,15 * *
+    - cron: "0 5 1,15 * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    shell: bash -euo pipefail {0}
+permissions:
+  contents: read
 
 jobs:
-  # Read the hatch-test matrix from pyproject.toml so it stays the single
-  # source of truth for Python versions and dep variants.
+  # Get the test environment from hatch as defined in pyproject.toml.
+  # This ensures that the pyproject.toml is the single point of truth for test definitions and the same tests are
+  # run locally and on continuous integration.
+  # Check [[tool.hatch.envs.hatch-test.matrix]] in pyproject.toml and https://hatch.pypa.io/latest/environment/ for
+  # more details.
   get-environments:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     outputs:
       envs: ${{ steps.get-envs.outputs.envs }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           filter: blob:none
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v7
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Get test environments
         id: get-envs
         run: |
@@ -37,14 +41,19 @@ jobs:
                 select(.key | startswith("hatch-test"))
                 | {
                     name: .key,
-                    label: (if (.key | contains("pre")) then .key + " (pre-release deps)" else .key end),
+                    label: (if (.key | contains("pre")) then .key + " (PRE-RELEASE DEPENDENCIES)" else .key end),
                     python: .value.python
                   }
               )')
           echo "envs=${ENVS_JSON}" | tee $GITHUB_OUTPUT
 
+  # Run tests through hatch. Spawns a separate runner for each environment defined in the hatch matrix obtained above.
   test:
     needs: get-environments
+    permissions:
+      id-token: write # for codecov OIDC
+      contents: read
+
     strategy:
       fail-fast: false
       matrix:
@@ -59,98 +68,92 @@ jobs:
 
     name: ${{ matrix.env.label }}
     runs-on: ${{ matrix.os }}
-    # `pre` (pre-release deps) is best-effort and must not gate merges.
-    continue-on-error: ${{ contains(matrix.env.name, 'pre') }}
+    continue-on-error: ${{ contains(matrix.env.name, 'pre') }} # make "all-green" pass even if pre-release job fails
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           filter: blob:none
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v7
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: ${{ matrix.env.python }}
-
-      - name: Create hatch environment
+      - name: create hatch environment
         run: uvx hatch env create ${{ matrix.env.name }}
-      - name: List installed packages
+      - name: list all all installed package versions
         run: uvx hatch run ${{ matrix.env.name }}:uv pip list
-      - name: Run tests
+      - name: run tests using hatch
         env:
           MPLBACKEND: agg
+          PLATFORM: ${{ matrix.os }}
+          DISPLAY: :42
         run: uvx hatch run ${{ matrix.env.name }}:run-cov -v --color=yes -n auto
-      # Upload the figures the plotting tests rendered so a maintainer can promote
-      # them to ground-truth baselines (see docs/contributing.md). Only the Linux
-      # py3.12-stable job is published: ground-truth figures must match the renderer
-      # CI validates against, and this is the canonical one. `always()` so figures
-      # are available even when an image comparison fails (the actual is saved
-      # before the assertion).
-      - name: Archive rendered figures (ground-truth baseline source)
+      # Rendered plotting-test figures, for promoting to ground-truth baselines (see docs/contributing.md).
+      # Only the Linux py3.12-stable job: baselines must match the renderer CI compares against.
+      - name: Archive rendered figures
         if: always() && matrix.os == 'ubuntu-latest' && matrix.env.name == 'hatch-test.py3.12-stable'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rendered-figures
           path: tests/figures/*
           retention-days: 14
           compression-level: 0 # PNGs are already compressed
           if-no-files-found: warn
-      - name: Generate coverage report
+      - name: generate coverage report
         run: |
+          # See https://coverage.readthedocs.io/page/config.html#run-patch
           test -f .coverage || uvx hatch run ${{ matrix.env.name }}:cov-combine
-          uvx hatch run ${{ matrix.env.name }}:cov-report
-          uvx hatch run ${{ matrix.env.name }}:coverage xml
+          uvx hatch run ${{ matrix.env.name }}:cov-report   # report visibly
+          uvx hatch run ${{ matrix.env.name }}:coverage xml # create report for upload
       - name: Upload coverage
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          fail_ci_if_error: true
+          use_oidc: true
 
-  test-conda:
+  # PETSc/SLEPc (pyGPCCA's krylov solvers) and R's mgcv have no PyPI wheels; the pixi environment in pyproject.toml
+  # takes them from conda-forge. No lockfile, so new petsc4py/slepc4py releases are tested as they appear.
+  test-krylov:
+    permissions:
+      id-token: write # for codecov OIDC
+      contents: read
+    name: krylov (PETSc/SLEPc) + R
     runs-on: ubuntu-latest
-    name: PETSc / SLEPc + R
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash -el {0}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           filter: blob:none
           fetch-depth: 0
-      - uses: conda-incubator/setup-miniconda@v4
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@9936258fee697aff89b3fed6ca1f80a382ef694e # v0.11.3
         with:
-          miniforge-version: latest
-          python-version: "3.12"
-          channels: conda-forge
-      - name: Install conda dependencies
-        run: >-
-          conda install --yes
-          petsc slepc petsc4py slepc4py mpi4py
-          rpy2 r-mgcv
-          pygpcca pygam scipy
-      - name: Install cellrank + test dependencies
-        # same `test` dependency group the hatch envs use, so the two never drift
-        run: pip install -e '.[plot]' --group test
-      - name: List installed packages
-        run: conda list
-      - name: Run tests
-        env:
-          MPLBACKEND: agg
-        run: python -m pytest tests/ -v --timeout=600 --cov --cov-report=xml
+          environments: krylov
+          locked: false
+          cache: false
+      - name: list all installed package versions
+        run: pixi list -e krylov
+      - name: run tests
+        run: pixi run -e krylov test -v --color=yes -n auto --cov --cov-report=xml
       - name: Upload coverage
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: conda
-          fail_ci_if_error: false
+          fail_ci_if_error: true
+          use_oidc: true
+          flags: krylov
 
+  # Check that all tests defined above pass. This makes it easy to set a single "required" test in branch
+  # protection instead of having to update it frequently. See https://github.com/re-actors/alls-green#why.
   check:
-    name: All tests pass
+    name: All tests pass # required by the `main` ruleset
     if: always()
-    needs: [get-environments, test, test-conda]
+    needs:
+      - get-environments
+      - test
+      - test-krylov
     runs-on: ubuntu-latest
     steps:
-      - uses: re-actors/alls-green@release/v1
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
         with:
-          allowed-failures: test-conda
           jobs: ${{ toJSON(needs) }}

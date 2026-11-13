@@ -10,6 +10,7 @@ repos:
     rev: v2.6.6
     hooks:
       - id: biome-format
+        exclude: ^\.cruft\.json$ # cruft writes it; never edited by hand
   - repo: https://github.com/jolars/panache-pre-commit
     rev: v3.18.0
     hooks:
@@ -29,7 +30,11 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      - id: detect-private-key
+      - id: check-case-conflict
+      # also catches conflict markers left by `cruft update`
       - id: check-merge-conflict
+        args: [--assume-in-merge]
       - id: check-ast
       - id: check-added-large-files
       - id: end-of-file-fixer
@@ -41,3 +46,8 @@ repos:
       - id: check-docstring-first
       - id: check-yaml
       - id: check-toml
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.32.0
+    hooks:
+      - id: zizmor
+        args: [--no-progress, --fix]

@@ -82,4 +82,4 @@ uv run pytest tests/test_kernels.py -v
 uv run pytest tests/test_gpcca.py -v
 ```
 
-PETSc/SLEPc tests are skipped unless the `petsc` extra is installed (requires a working MPI + PETSc/SLEPc build); some R-backed model tests are skipped unless `rpy2` + R’s `mgcv` are available. These skips are expected **locally**, but they are **not** a CI coverage gap: alongside the main `hatch-test` matrix (which skips them), a dedicated `PETSc / SLEPc + R` job in `.github/workflows/test.yaml` installs these stacks and runs the otherwise-skipped tests. Before assuming a skip means “untested in CI”, check what that workflow actually installs — the `test` dependency group in `pyproject.toml` is only part of the picture.
+PETSc/SLEPc tests are skipped unless `petsc4py`/`slepc4py` are installed; some R-backed model tests are skipped unless `rpy2` + R’s `mgcv` are available. These skips are expected in the `hatch-test` matrix, but they are **not** a CI coverage gap: the pixi `krylov` environment in `pyproject.toml` takes these stacks from conda-forge and runs the full suite (`pixi run -e krylov test`; CI job `krylov (PETSc/SLEPc) + R`).

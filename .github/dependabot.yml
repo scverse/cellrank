@@ -3,15 +3,20 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+    cooldown:
+      default-days: 7
     groups:
-      actions:
-        patterns: ["*"]
+      actions-deps:
+        patterns:
+          - "*"
 
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
@@ -22,6 +27,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       pre-commit:
         patterns: ["*"]
