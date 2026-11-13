@@ -15,6 +15,7 @@ import pandas as pd
 import scipy.sparse as sp
 import wrapt
 from anndata import AnnData
+from anndata.acc import A
 from matplotlib import cm, colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas.api.types import infer_dtype
@@ -1043,7 +1044,7 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
         key
             Key in :attr:`~anndata.AnnData.obs`, :attr:`~anndata.AnnData.var_names` or
             :attr:`~anndata.AnnData.raw.var_names`. Search first starts in `.obs`, then `.raw.var_names` and lastly
-            `.layers`, using :meth:`~anndata.AnnData.obs_vector`.
+            `.layers`.
 
         Returns
         -------
@@ -1085,20 +1086,14 @@ class BaseModel(IOMixin, abc.ABC, metaclass=BaseModelMeta):
                 None,
             )
 
-        try:
-            # can in principle return data from `.obs`, in which case it's mostly invalid
-            return (
-                key,
-                self.adata.obs_vector(key, layer=self._data_key),
-                ColorType.CONT,
-                None,
-            )
-        except KeyError:
-            logger.debug(
-                "Key `%r` not found in `adata.obs` or `adata%s.var_names`. Ignoring`",
-                key,
-                ".raw" if self._use_raw else "",
-            )
+        if key in self.adata.var_names:
+            return key, self.adata[A.layers[self._data_key][:, key]], ColorType.CONT, None
+
+        logger.debug(
+            "Key `%r` not found in `adata.obs` or `adata%s.var_names`. Ignoring`",
+            key,
+            ".raw" if self._use_raw else "",
+        )
 
         if same_plot or np.allclose(self.w_all, 1.0):
             return None, "black", ColorType.STR, None
