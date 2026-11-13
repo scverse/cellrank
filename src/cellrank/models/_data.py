@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from anndata import AnnData
+from anndata.acc import A
 
 from cellrank._utils._utils import _densify_squeeze
 
@@ -93,7 +94,7 @@ class Gene(Signal):
             raw = adata.raw
             ix = np.where(raw.var_names == self.gene)[0]
             return raw.X[:, ix]
-        return adata.obs_vector(self.gene, layer=self.layer)
+        return adata[A.layers[self.layer][:, self.gene]]
 
 
 @dataclass(frozen=True)

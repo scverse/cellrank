@@ -350,7 +350,7 @@ class BaseEstimator(IOMixin, KernelMixin, AnnDataMixin, abc.ABC):
                     old = old[keys]
                     # avoid duplicates
                     old = old[old.columns.difference(new.columns)]
-                    setattr(adata, attr, pd.merge(new, old, how="inner", left_index=True, right_index=True, copy=copy))
+                    setattr(adata, attr, pd.merge(new, old, how="inner", left_index=True, right_index=True))
                 elif isinstance(new, Mapping):
                     old = {k: old[k] for k in keys}
                     # old has preference, since it's user supplied

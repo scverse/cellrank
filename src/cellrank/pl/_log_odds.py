@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from anndata import AnnData
+from anndata.acc import A
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize, to_hex
@@ -155,21 +156,13 @@ def log_odds(
         except KeyError:
             # unable to find data in `adata.obs`, try res
             try:
-                # fmt: off
+                values = adata.raw[A.X[:, key]] if use_raw else adata[A.layers[layer][:, key]]
                 if thresh is None:
-                    values = adata.raw.obs_vector(key) if use_raw else adata.obs_vector(key, layer=layer)
                     palette, sm = cont_palette(values)
                     hue, thresh_mask = None, None
                 else:
-                    if use_raw:
-                        values = np.asarray(adata.raw[:, key].X[mask].sum(1)).squeeze()
-                    elif layer not in (None, "X"):
-                        values = np.asarray(adata[:, key].layers[layer][mask].sum(1)).squeeze()
-                    else:
-                        values = np.asarray(adata[:, key].X[mask].sum(1)).squeeze()
-                    thresh_mask = values > thresh
+                    thresh_mask = values[mask] > thresh
                     hue, palette, sm = None, None, None
-                # fmt: on
             except KeyError as e:
                 raise e from None
 
@@ -180,6 +173,8 @@ def log_odds(
     if use_raw and adata.raw is None:
         logger.warning("No raw attribute set. Setting `use_raw=False`")
         use_raw = False
+    if layer == "X":
+        layer = None
 
     probs = Lineage.from_adata(adata, backward=backward)
     time = _ensure_numeric_ordered(adata, time_key)

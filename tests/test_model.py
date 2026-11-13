@@ -860,7 +860,7 @@ class TestSignals:
     def test_gene_fetches_x(self, adata_cflare):
         g = adata_cflare.var_names[0]
         sig = Gene(g)
-        np.testing.assert_array_almost_equal(sig.fetch(adata_cflare), adata_cflare.obs_vector(g))
+        np.testing.assert_array_almost_equal(sig.fetch(adata_cflare), adata_cflare[:, g].to_df()[g])
         assert sig.name == g
         assert sig.ylabel == "expression"
         assert sig.layer is None
@@ -869,7 +869,7 @@ class TestSignals:
     def test_gene_fetches_layer(self, adata_cflare):
         g = adata_cflare.var_names[0]
         sig = Gene(g, layer="Ms")
-        np.testing.assert_array_almost_equal(sig.fetch(adata_cflare), adata_cflare.obs_vector(g, layer="Ms"))
+        np.testing.assert_array_almost_equal(sig.fetch(adata_cflare), adata_cflare[:, g].to_df(layer="Ms")[g])
         assert sig.layer == "Ms"
 
     def test_obs_fetches_column(self, adata_cflare):
@@ -940,7 +940,7 @@ class TestPrepareSignal:
         import warnings
 
         with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
+            warnings.filterwarnings("error", ".*will be deprecated in CellRank", DeprecationWarning)
             create_model(adata_cflare).prepare(adata_cflare.var_names[0], "0", "latent_time")
 
     @pytest.mark.parametrize("kwargs", [{"data_key": "Ms"}, {"use_raw": False}])

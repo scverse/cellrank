@@ -1220,7 +1220,7 @@ class TestGeneTrend:
     def test_trends_gene_layer_signal_no_warning(self, adata_gpcca_fwd):
         adata, _ = adata_gpcca_fwd
         with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
+            warnings.filterwarnings("error", ".*will be deprecated in CellRank", DeprecationWarning)
             fig = self._signal_trends(adata, Gene(adata.var_names[0], layer="Ms"))
         _assert_drawn(fig)
 
@@ -2213,6 +2213,7 @@ class TestLogOdds:
                 lambda a: _log_odds_ax(a, keys=a.var_names[:3], threshold=[0.7, 0.2, 0.3]), id="multiple_threshold"
             ),
             pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[3:6], layer="Ms"), id="layer"),
+            pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[3:6], layer="X"), id="layer_X"),
             pytest.param(lambda a: _log_odds_ax(a, keys=a.raw.var_names[3:6], use_raw=True), id="use_raw"),
             pytest.param(lambda a: _log_odds_ax(a, keys=a.var_names[:2], cmap="inferno", seed=43), id="cmap"),
             pytest.param(
